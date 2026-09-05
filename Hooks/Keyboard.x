@@ -49,14 +49,12 @@ static const void *kLGKeyboardVisualEffectSuppressingHiddenKey =
     &kLGKeyboardVisualEffectSuppressingHiddenKey;
 static const void *kLGKeyboardVisualEffectRequestedHiddenKey =
     &kLGKeyboardVisualEffectRequestedHiddenKey;
+static const void *kLGKeyboardMaskKey = &kLGKeyboardMaskKey;
 static const void *kLGKeyboardBorderKey = &kLGKeyboardBorderKey;
 static NSHashTable<UIView *> *gLGKeyboardBackdrops;
 static NSHashTable<UIView *> *gLGKeyboardVisualEffects;
 static NSUInteger gLGKeyboardBackdropLogCount;
-static NSMutableSet<NSString *> *gLGKeyboardHookedKeyplaneClasses;
 static BOOL gLGKeyboardKeyplaneRefreshScheduled;
-static __thread BOOL gLGKeyboardApplyingKeyplaneBounds;
-static const CGFloat kLGKeyboardBottomGlassExtra = 10.0;
 
 static CGFloat LGKeyboardCornerRadius(void) {
     return fmin(60.0, fmax(0.0,
@@ -68,10 +66,6 @@ static CGFloat LGKeyboardTopOverhang(void) {
     return fmin(60.0, fmax(0.0,
         LG_prefFloat(@"Keyboard.Overhang",
                      LGKeyboardDefaultOverhang)));
-}
-
-static CGFloat LGKeyboardKeyplaneCompensation(void) {
-    return LGKeyboardTopOverhang() * 0.5;
 }
 
 static BOOL LGIsRemoteKeyboardWindow(UIWindow *window) {
@@ -228,7 +222,7 @@ static id LGKeyboardSendObject(id target, SEL selector) {
     return ((id (*)(id, SEL))objc_msgSend)(target, selector);
 }
 
-static UIView *LGKeyboardCurrentKeyplaneView(void) {
+static UIView *LGKeyboardCurrentLayoutView(void) {
     Class implClass = NSClassFromString(@"UIKeyboardImpl");
     id impl = LGKeyboardSendObject(implClass,
                                    NSSelectorFromString(@"activeInstance"));
@@ -239,166 +233,28 @@ static UIView *LGKeyboardCurrentKeyplaneView(void) {
 
     id layout = LGKeyboardSendObject(impl,
                                      NSSelectorFromString(@"activeLayout"));
-    id keyplane = LGKeyboardSendObject(
-        layout, NSSelectorFromString(@"currentKeyplaneView"));
-    return [keyplane isKindOfClass:UIView.class] ? (UIView *)keyplane : nil;
+    return [layout isKindOfClass:UIView.class] ? (UIView *)layout : nil;
 }
 
-static CGFloat LGKeyboardTargetKeyplaneBoundsY(void) {
+static CGFloat LGKeyboardTargetLayoutOffset(void) {
     return LGKeyboardNeedsTopReserve()
-        ? -LGKeyboardKeyplaneCompensation()
+        ? LGKeyboardTopOverhang() * 0.5
         : 0.0;
 }
 
-static BOOL LGKeyboardIsDirectKeyplaneAtlas(UIView *view) {
-    if (!view || !view.superview) return NO;
-    return [NSStringFromClass(view.class)
-                isEqualToString:@"UIKBSplitImageView"] &&
-           [NSStringFromClass(view.superview.class)
-                isEqualToString:@"UIKBKeyplaneView"];
-}
-
-static void LGKeyboardNormalizeKeyplaneAtlasFrames(UIView *keyplane) {
-    if (!keyplane || !LGKeyboardNeedsTopReserve()) return;
-
-    // moving keyplane bounds must not move its baked image atlas twice
-    CGFloat keyplaneBoundsY = keyplane.bounds.origin.y;
-    if (fabs(keyplaneBoundsY) < 0.01) return;
-
-    for (UIView *child in keyplane.subviews) {
-        if (!LGKeyboardIsDirectKeyplaneAtlas(child)) continue;
-
-        CGRect frame = child.frame;
-
-        if (fabs(frame.origin.y - keyplaneBoundsY) < 0.51) {
-            frame.origin.y -= keyplaneBoundsY;
-            child.frame = frame;
-        }
-    }
-}
-
-static void LGKeyboardCallOriginalKeyplaneSetBounds(UIView *keyplane,
-                                                     CGRect bounds) {
-    SEL originalSelector =
-        NSSelectorFromString(@"lg_keyboard_original_setBounds:");
-    if ([keyplane respondsToSelector:originalSelector]) {
-        ((void (*)(id, SEL, CGRect))objc_msgSend)(
-            keyplane, originalSelector, bounds);
-    }
-}
-
-static void LGKeyboardApplyKeyplaneBoundsOffset(UIView *keyplane) {
-    if (!keyplane || gLGKeyboardApplyingKeyplaneBounds) return;
-
-    CGRect bounds = keyplane.bounds;
-    CGFloat targetY = LGKeyboardTargetKeyplaneBoundsY();
-    if (fabs(bounds.origin.y - targetY) < 0.01) return;
-
-    bounds.origin.y = targetY;
-    gLGKeyboardApplyingKeyplaneBounds = YES;
-    LGKeyboardCallOriginalKeyplaneSetBounds(keyplane, bounds);
-    gLGKeyboardApplyingKeyplaneBounds = NO;
-}
-
-static void LGKeyboardKeyplaneSetBounds(id object, SEL selector,
-                                         CGRect bounds) {
-    UIView *keyplane = [object isKindOfClass:UIView.class]
-        ? (UIView *)object
-        : nil;
-    if (!keyplane) return;
-
-    bounds.origin.y = LGKeyboardTargetKeyplaneBoundsY();
-    LGKeyboardCallOriginalKeyplaneSetBounds(keyplane, bounds);
-}
-
-static void LGKeyboardKeyplaneLayoutSubviews(id object, SEL selector) {
-    SEL originalSelector =
-        NSSelectorFromString(@"lg_keyboard_original_layoutSubviews");
-    if ([object respondsToSelector:originalSelector]) {
-        ((void (*)(id, SEL))objc_msgSend)(object, originalSelector);
-    }
-
-    UIView *keyplane = [object isKindOfClass:UIView.class]
-        ? (UIView *)object
-        : nil;
-    LGKeyboardApplyKeyplaneBoundsOffset(keyplane);
-    LGKeyboardNormalizeKeyplaneAtlasFrames(keyplane);
-}
-
-static void LGKeyboardInstallKeyplaneHooks(UIView *keyplane) {
-    if (!keyplane) return;
-
-    // keyplane classes vary so hook each concrete class once
-    Class keyplaneClass = object_getClass(keyplane);
-    NSString *className = NSStringFromClass(keyplaneClass);
-    if (!keyplaneClass || !className.length ||
-        [gLGKeyboardHookedKeyplaneClasses containsObject:className]) {
-        LGKeyboardApplyKeyplaneBoundsOffset(keyplane);
-        LGKeyboardNormalizeKeyplaneAtlasFrames(keyplane);
-        return;
-    }
-
-    @synchronized (gLGKeyboardHookedKeyplaneClasses) {
-        if ([gLGKeyboardHookedKeyplaneClasses containsObject:className]) {
-            LGKeyboardApplyKeyplaneBoundsOffset(keyplane);
-            LGKeyboardNormalizeKeyplaneAtlasFrames(keyplane);
-            return;
-        }
-
-        SEL setBoundsSelector = @selector(setBounds:);
-        Method setBoundsMethod =
-            class_getInstanceMethod(keyplaneClass, setBoundsSelector);
-        if (!setBoundsMethod) return;
-
-        IMP originalSetBounds = method_getImplementation(setBoundsMethod);
-        const char *setBoundsTypes = method_getTypeEncoding(setBoundsMethod);
-        SEL originalSetBoundsSelector =
-            NSSelectorFromString(@"lg_keyboard_original_setBounds:");
-        class_addMethod(keyplaneClass, originalSetBoundsSelector,
-                        originalSetBounds, setBoundsTypes);
-
-        if (!class_addMethod(keyplaneClass, setBoundsSelector,
-                             (IMP)LGKeyboardKeyplaneSetBounds,
-                             setBoundsTypes)) {
-            Method directSetBoundsMethod =
-                class_getInstanceMethod(keyplaneClass, setBoundsSelector);
-            method_setImplementation(directSetBoundsMethod,
-                                     (IMP)LGKeyboardKeyplaneSetBounds);
-        }
-
-        SEL layoutSelector = @selector(layoutSubviews);
-        Method layoutMethod =
-            class_getInstanceMethod(keyplaneClass, layoutSelector);
-        if (layoutMethod) {
-            IMP originalLayout = method_getImplementation(layoutMethod);
-            const char *layoutTypes = method_getTypeEncoding(layoutMethod);
-            SEL originalLayoutSelector =
-                NSSelectorFromString(@"lg_keyboard_original_layoutSubviews");
-            class_addMethod(keyplaneClass, originalLayoutSelector,
-                            originalLayout, layoutTypes);
-
-            if (!class_addMethod(keyplaneClass, layoutSelector,
-                                 (IMP)LGKeyboardKeyplaneLayoutSubviews,
-                                 layoutTypes)) {
-                Method directLayoutMethod =
-                    class_getInstanceMethod(keyplaneClass, layoutSelector);
-                method_setImplementation(directLayoutMethod,
-                                         (IMP)LGKeyboardKeyplaneLayoutSubviews);
-            }
-        }
-
-        [gLGKeyboardHookedKeyplaneClasses addObject:className];
-        LGLog(@"[keyboard] hooked runtime keyplane class=%@ offset=%.2f",
-              className, LGKeyboardKeyplaneCompensation());
-    }
-
-    LGKeyboardApplyKeyplaneBoundsOffset(keyplane);
-    LGKeyboardNormalizeKeyplaneAtlasFrames(keyplane);
+static void LGKeyboardApplyLayoutOffset(UIView *layout) {
+    if (!layout) return;
+    CGFloat targetY = LGKeyboardTargetLayoutOffset();
+    CGRect frame = layout.frame;
+    if (CGAffineTransformIsIdentity(layout.transform) &&
+        fabs(frame.origin.y - targetY) < 0.01) return;
+    layout.transform = CGAffineTransformIdentity;
+    frame.origin.y = targetY;
+    layout.frame = frame;
 }
 
 static void LGKeyboardRefreshCurrentKeyplane(void) {
-    UIView *keyplane = LGKeyboardCurrentKeyplaneView();
-    LGKeyboardInstallKeyplaneHooks(keyplane);
+    LGKeyboardApplyLayoutOffset(LGKeyboardCurrentLayoutView());
 }
 
 static void LGKeyboardScheduleKeyplaneRefresh(void) {
@@ -453,6 +309,8 @@ static CGRect LGKeyboardMergedBackdropFrame(NSArray<UIView *> *backdrops,
                                             UIView *container) {
     CGRect frame = CGRectNull;
     for (UIView *backdrop in backdrops) {
+        if (CGRectGetWidth(backdrop.bounds) <= 1.0 ||
+            CGRectGetHeight(backdrop.bounds) <= 1.0) continue;
         CGRect converted = [backdrop.superview convertRect:backdrop.frame
                                                     toView:container];
         frame = CGRectIsNull(frame) ? converted : CGRectUnion(frame, converted);
@@ -471,6 +329,12 @@ static NSString *LGKeyboardBackdropSummary(NSArray<UIView *> *backdrops) {
 }
 
 static void LGUpdateKeyboardBorder(LGLiveBackdropView *glass) {
+    CAShapeLayer *mask = objc_getAssociatedObject(glass, kLGKeyboardMaskKey);
+    if (!mask) {
+        mask = [CAShapeLayer layer];
+        objc_setAssociatedObject(glass, kLGKeyboardMaskKey, mask,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
     CAShapeLayer *border = objc_getAssociatedObject(glass, kLGKeyboardBorderKey);
     if (!border) {
         border = [CAShapeLayer layer];
@@ -485,15 +349,38 @@ static void LGUpdateKeyboardBorder(LGLiveBackdropView *glass) {
     CGFloat lineWidth = 1.0 / MAX(scale, 1.0);
     CGRect borderRect = CGRectInset(glass.bounds, lineWidth * 0.5,
                                     lineWidth * 0.5);
-    CGFloat radius = MAX(0.0, glass.layer.cornerRadius - lineWidth * 0.5);
+    CGFloat radius = MAX(0.0, LGKeyboardCornerRadius() - lineWidth * 0.5);
+    UIBezierPath *maskPath = [UIBezierPath
+        bezierPathWithRoundedRect:glass.bounds
+               byRoundingCorners:UIRectCornerTopLeft | UIRectCornerTopRight
+                     cornerRadii:CGSizeMake(radius, radius)];
+    UIBezierPath *borderPath = [UIBezierPath bezierPath];
+    [borderPath moveToPoint:CGPointMake(CGRectGetMinX(borderRect),
+                                            CGRectGetMaxY(borderRect))];
+    [borderPath addLineToPoint:CGPointMake(CGRectGetMinX(borderRect),
+                                               CGRectGetMinY(borderRect) + radius)];
+    [borderPath addArcWithCenter:CGPointMake(CGRectGetMinX(borderRect) + radius,
+                                                  CGRectGetMinY(borderRect) + radius)
+                             radius:radius startAngle:M_PI endAngle:M_PI * 1.5
+                          clockwise:YES];
+    [borderPath addLineToPoint:CGPointMake(CGRectGetMaxX(borderRect) - radius,
+                                               CGRectGetMinY(borderRect))];
+    [borderPath addArcWithCenter:CGPointMake(CGRectGetMaxX(borderRect) - radius,
+                                                  CGRectGetMinY(borderRect) + radius)
+                             radius:radius startAngle:M_PI * 1.5 endAngle:0.0
+                          clockwise:YES];
+    [borderPath addLineToPoint:CGPointMake(CGRectGetMaxX(borderRect),
+                                               CGRectGetMaxY(borderRect))];
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
+    mask.frame = glass.bounds;
+    mask.path = maskPath.CGPath;
     border.frame = glass.bounds;
     border.contentsScale = scale;
     border.lineWidth = lineWidth;
-    border.path = [UIBezierPath bezierPathWithRoundedRect:borderRect
-                                              cornerRadius:radius].CGPath;
+    border.path = borderPath.CGPath;
     [CATransaction commit];
+    glass.layer.mask = mask;
 }
 
 static void LGUpdateKeyboardGlass(UIView *stock) {
@@ -518,10 +405,26 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
         }
     }
 
+    BOOL hasPredictionStrip = NO;
+    for (UIView *backdrop in backdrops) {
+        if (backdrop != primary && CGRectGetHeight(backdrop.bounds) > 1.0) {
+            hasPredictionStrip = YES;
+            break;
+        }
+    }
+    BOOL predictionStateChanged =
+        !gLGKeyboardPredictionStateKnown ||
+        gLGKeyboardHasPredictionStrip != hasPredictionStrip;
+    gLGKeyboardPredictionStateKnown = YES;
+    gLGKeyboardHasPredictionStrip = hasPredictionStrip;
+
+    if (predictionStateChanged) {
+        LGKeyboardRefreshReportedGeometry(stock.window.screen);
+    }
+
     if (stock != primary) {
         LGRemoveKeyboardGlass(stock);
         LGKeyboardSetStockHidden(stock, YES);
-        return;
     }
 
     UIView *container = primary.superview;
@@ -530,23 +433,12 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
     if (CGRectIsEmpty(mergedFrame)) {
         mergedFrame = [primary.superview convertRect:primary.frame toView:container];
     }
-    BOOL hasPredictionStrip = NO;
-    for (UIView *backdrop in backdrops) {
-        if (backdrop != primary &&
-            CGRectGetHeight(backdrop.bounds) > 1.0) {
-            hasPredictionStrip = YES;
-            break;
-        }
-    }
-    BOOL predictionStateChanged =
-        !gLGKeyboardPredictionStateKnown ||
-        gLGKeyboardHasPredictionStrip != hasPredictionStrip;
-
-    gLGKeyboardPredictionStateKnown = YES;
-    gLGKeyboardHasPredictionStrip = hasPredictionStrip;
-
-    if (predictionStateChanged) {
-        LGKeyboardRefreshReportedGeometry(stock.window.screen);
+    UIView *keyboard = LGActiveKeyboardForScreen(stock.window.screen);
+    CGFloat keyboardHeight = CGRectGetHeight(keyboard.bounds);
+    if (keyboardHeight > 1.0) {
+        mergedFrame.size.height += keyboardHeight +
+            (hasPredictionStrip ? 0.0 : LGKeyboardTopOverhang()) -
+            CGRectGetHeight(primary.bounds);
     }
     if (!hasPredictionStrip) {
         container.clipsToBounds = NO;
@@ -554,8 +446,6 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
 
         LGKeyboardScheduleKeyplaneRefresh();
     }
-
-    mergedFrame.size.height += LGKeyboardTopOverhang() + kLGKeyboardBottomGlassExtra;
 
     if (gLGKeyboardBackdropLogCount++ < 4) {
         LGLog(@"[keyboard] backdrop merge count=%lu prediction=%d primary=%p container=%@ merged=%@ members=[%@]",
@@ -581,9 +471,10 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
     }
 
     glass.frame = mergedFrame;
-    glass.layer.mask = nil;
-    glass.layer.cornerRadius = LGKeyboardCornerRadius();
-    glass.layer.masksToBounds = YES;
+    glass.layer.cornerRadius = 0.0;
+    glass.layer.masksToBounds = NO;
+    glass.lgShapeCornerRadius = LGKeyboardCornerRadius();
+    glass.lgShapeRect = glass.bounds;
     if (@available(iOS 13.0, *)) {
         glass.layer.cornerCurve = kCACornerCurveContinuous;
     }
@@ -777,43 +668,11 @@ static void LGUpdateKeyboardVisualEffect(UIView *effectView) {
 
 %end
 
-%hook UIKBSplitImageView
-
-- (void)setFrame:(CGRect)frame {
-    if (LGKeyboardNeedsTopReserve() &&
-        LGKeyboardIsDirectKeyplaneAtlas(self)) {
-        CGFloat parentBoundsY = self.superview.bounds.origin.y;
-        if (fabs(parentBoundsY) > 0.01 &&
-            fabs(frame.origin.y - parentBoundsY) < 0.51) {
-            frame.origin.y -= parentBoundsY;
-        }
-    }
-    %orig(frame);
-}
-
-- (void)setCenter:(CGPoint)center {
-    if (LGKeyboardNeedsTopReserve() &&
-        LGKeyboardIsDirectKeyplaneAtlas(self)) {
-        CGFloat parentBoundsY = self.superview.bounds.origin.y;
-        CGFloat stockCenterY = CGRectGetHeight(self.bounds) * 0.5;
-        CGFloat mirroredCenterY = stockCenterY + parentBoundsY;
-        if (fabs(parentBoundsY) > 0.01 &&
-            fabs(center.y - mirroredCenterY) < 0.51) {
-            center.y -= parentBoundsY;
-        }
-    }
-    %orig(center);
-}
-
-%end
-
 %hook UIKeyboardLayoutStar
 
 - (void)layoutSubviews {
     %orig;
-
-    LGKeyboardRefreshCurrentKeyplane();
-    LGKeyboardNormalizeKeyplaneAtlasFrames(LGKeyboardCurrentKeyplaneView());
+    LGKeyboardApplyLayoutOffset(self);
     LGKeyboardScheduleKeyplaneRefresh();
 }
 
@@ -824,6 +683,7 @@ static void LGUpdateKeyboardVisualEffect(UIView *effectView) {
 - (NSString *)fontName {
     NSString *stockName = %orig;
     if (!lgHostEnabled(@"Keyboard") ||
+        !LG_prefBool(@"Keyboard.CustomFont.Enabled", YES) ||
         [stockName rangeOfString:@"Keycaps"
                          options:NSCaseInsensitiveSearch].location ==
             NSNotFound) {
@@ -838,7 +698,6 @@ static void LGUpdateKeyboardVisualEffect(UIView *effectView) {
 %ctor {
     gLGKeyboardBackdrops = [NSHashTable weakObjectsHashTable];
     gLGKeyboardVisualEffects = [NSHashTable weakObjectsHashTable];
-    gLGKeyboardHookedKeyplaneClasses = [NSMutableSet set];
     LGLog(@"[keyboard] ctor process=%@ bundle=%@ backdrop=%d visualEffect=%d",
           NSProcessInfo.processInfo.processName,
           NSBundle.mainBundle.bundleIdentifier ?: @"(nil)",

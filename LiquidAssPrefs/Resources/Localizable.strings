@@ -176,6 +176,8 @@
 
 "prefs.section.keyboard_geometry.title" = "Keyboard Geometry";
 "prefs.section.keyboard_geometry.subtitle" = "Shape and spacing for the keyboard glass.";
+"prefs.control.keyboard_custom_font" = "Custom Font";
+"prefs.subtitle.keyboard_custom_font" = "Use the bundled SF Compact font for keyboard keys.";
 "prefs.control.keyboard_key_radius" = "Key Corner Radius";
 "prefs.subtitle.keyboard_key_radius" = "Corner radius used when rendering keyboard keys.";
 "prefs.control.keyboard_overhang" = "Overhang";

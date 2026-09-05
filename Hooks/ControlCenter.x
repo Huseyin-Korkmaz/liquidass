@@ -9,6 +9,54 @@
 
 static CGFloat sCCSmallModuleRadius = 0.0;
 
+typedef NS_ENUM(NSUInteger, CCProfileBucket) {
+    CCProfileFullscreen,
+    CCProfileDimSync,
+    CCProfileGlassRefresh,
+    CCProfileModuleRound,
+    CCProfileSliderRound,
+    CCProfileBucketCount,
+};
+
+typedef struct {
+    NSUInteger calls;
+    CFTimeInterval total;
+    CFTimeInterval peak;
+} CCProfileSample;
+
+static CCProfileSample sCCProfile[CCProfileBucketCount];
+static CFTimeInterval sCCProfileStarted;
+static NSString *const sCCProfileNames[CCProfileBucketCount] = {
+    @"fullscreen", @"dimSync", @"glassRefresh", @"moduleRound", @"sliderRound"
+};
+
+static void ccProfileReport(BOOL force) {
+    if (!LGDebugLoggingEnabled()) return;
+    CFTimeInterval now = CACurrentMediaTime();
+    if (!sCCProfileStarted) sCCProfileStarted = now;
+    if (!force && now - sCCProfileStarted < 0.5) return;
+    NSMutableString *summary = [NSMutableString stringWithString:@"[CCPROF]"];
+    for (NSUInteger index = 0; index < CCProfileBucketCount; index++) {
+        CCProfileSample sample = sCCProfile[index];
+        if (!sample.calls) continue;
+        [summary appendFormat:@" %@=%lu/%.3f/%.3fms", sCCProfileNames[index],
+            (unsigned long)sample.calls, sample.total * 1000.0 / sample.calls,
+            sample.peak * 1000.0];
+    }
+    LGLog(@"%@", summary);
+    memset(sCCProfile, 0, sizeof(sCCProfile));
+    sCCProfileStarted = now;
+}
+
+static void ccProfileRecord(CCProfileBucket bucket, CFTimeInterval started) {
+    if (!LGDebugLoggingEnabled()) return;
+    CFTimeInterval elapsed = CACurrentMediaTime() - started;
+    sCCProfile[bucket].calls++;
+    sCCProfile[bucket].total += elapsed;
+    sCCProfile[bucket].peak = MAX(sCCProfile[bucket].peak, elapsed);
+    ccProfileReport(NO);
+}
+
 static UIView *ccModuleAncestor(UIView *v) {
     for (UIView *a = v.superview; a; a = a.superview)
         if (isExactClass(a, @"CCUIContentModuleContainerView")) return a;
@@ -357,7 +405,7 @@ static UIView *ccFullscreenDimView(UIView *backdropMaterial, BOOL create) {
 
 #pragma mark - fullscreen backdrop diagnostics
 
-static void ccApplyFullscreenBackdropStyle(UIView *overlayRoot) {
+static void ccApplyFullscreenBackdropStyleImpl(UIView *overlayRoot) {
     if (!overlayRoot) return;
     [ccOverlayRoots() addObject:overlayRoot];
 
@@ -430,7 +478,13 @@ static void ccApplyFullscreenBackdropStyle(UIView *overlayRoot) {
     dimView.hidden = NO;
 }
 
-static void ccSyncFullscreenDimForRoot(UIView *overlayRoot) {
+static void ccApplyFullscreenBackdropStyle(UIView *overlayRoot) {
+    CFTimeInterval started = CACurrentMediaTime();
+    ccApplyFullscreenBackdropStyleImpl(overlayRoot);
+    ccProfileRecord(CCProfileFullscreen, started);
+}
+
+static void ccSyncFullscreenDimForRootImpl(UIView *overlayRoot) {
     if (!overlayRoot) return;
 
     UIView *backdropMaterial = objc_getAssociatedObject(overlayRoot, kCCFullscreenMaterialKey);
@@ -462,6 +516,12 @@ static void ccSyncFullscreenDimForRoot(UIView *overlayRoot) {
     }
 
     dimView.alpha = targetAlpha * progress;
+}
+
+static void ccSyncFullscreenDimForRoot(UIView *overlayRoot) {
+    CFTimeInterval started = CACurrentMediaTime();
+    ccSyncFullscreenDimForRootImpl(overlayRoot);
+    ccProfileRecord(CCProfileDimSync, started);
 }
 
 static void ccSetFullscreenDimAlpha(UIView *overlayRoot, CGFloat alpha) {
@@ -699,7 +759,7 @@ static void ccRoundMaterialsInSubtree(UIView *view, CGFloat radius,
     }
 }
 
-static void roundSliderMaterials(UIView *slider) {
+static void roundSliderMaterialsImpl(UIView *slider) {
     BOOL eligible = !ccHasSBElasticHierarchy(slider);
 
     CGFloat radius = ccPillRadius(slider);
@@ -715,6 +775,12 @@ static void roundSliderMaterials(UIView *slider) {
     }
 }
 
+static void roundSliderMaterials(UIView *slider) {
+    CFTimeInterval started = CACurrentMediaTime();
+    roundSliderMaterialsImpl(slider);
+    ccProfileRecord(CCProfileSliderRound, started);
+}
+
 static void roundToggleFills(UIView *buttonModule) {
     UIView *module = ccModuleAncestor(buttonModule);
     BOOL eligible = module && ccIsModuleCandidate(module) &&
@@ -725,7 +791,7 @@ static void roundToggleFills(UIView *buttonModule) {
         if (isExactClass(child, @"UIView")) ccApplyOrRestoreRound(child, r, eligible);
 }
 
-static void roundModuleContainer(UIView *module) {
+static void roundModuleContainerImpl(UIView *module) {
     if (!isExactClass(module, @"CCUIContentModuleContainerView")) return;
     BOOL eligible = ccIsModuleCandidate(module) && !ccHasSBElasticHierarchy(module);
     CGFloat r = eligible ? ccModuleCornerRadius(module) : 0.0;
@@ -736,7 +802,13 @@ static void roundModuleContainer(UIView *module) {
             ccApplyOrRestoreRound(sub, r, eligible);
 }
 
-static void ccRefreshContentContainerGlass(UIView *container) {
+static void roundModuleContainer(UIView *module) {
+    CFTimeInterval started = CACurrentMediaTime();
+    roundModuleContainerImpl(module);
+    ccProfileRecord(CCProfileModuleRound, started);
+}
+
+static void ccRefreshContentContainerGlassImpl(UIView *container) {
     for (UIView *material in container.subviews) {
         if (!isExactClass(material, @"MTMaterialView") ||
             !LGMaterialHasGlass(material, kGlassKey)) continue;
@@ -745,6 +817,12 @@ static void ccRefreshContentContainerGlass(UIView *container) {
             LGInstallRegisteredGlassInMaterial(material, kGlassKey, @"ControlCenter",
                                                UIEdgeInsetsZero, radius, nil);
     }
+}
+
+static void ccRefreshContentContainerGlass(UIView *container) {
+    CFTimeInterval started = CACurrentMediaTime();
+    ccRefreshContentContainerGlassImpl(container);
+    ccProfileRecord(CCProfileGlassRefresh, started);
 }
 
 #pragma mark - hooks
@@ -807,6 +885,7 @@ static void ccRefreshContentContainerGlass(UIView *container) {
     %orig;
     UIView *root = ((UIViewController *)self).view;
     ccApplyFullscreenBackdropStyle(root);
+    ccProfileReport(YES);
 }
 
 - (void)viewWillDisappear:(BOOL)animated {

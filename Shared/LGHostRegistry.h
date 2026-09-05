@@ -45,7 +45,7 @@ typedef struct {
     X(CoverSheet,     "dylv.liquidglass.coversheet",   "CoverSheet",     0.00f,          (28.0f / 220.0f) * 1.6f,       192.0f, 1.4f, 1.60f, 0.0f, 0.0f,  2.00f, "#0000002E", "#0000002E") \
     X(TabBar,         "dylv.liquidglass.tabbar",       "TabBar",         0.50f,          0.50f,                         108.0f, 2.2f, 1.80f, 3.0f, 1.0f,  2.00f, "#FFFFFF80", "#2A2A2D80") \
     X(TabBarSelection,"dylv.liquidglass.tabbarselect", "TabBarSelection",0.50f,          (28.0f / 220.0f) * 1.2f,       132.0f, 1.4f, 1.60f, 0.0f, 1.0f,  0.50f, "#FFFFFF1A", "#FFFFFF0D") \
-    X(Keyboard,       "dylv.liquidglass.keyboard",     "Keyboard",       0.00f,          (28.0f / 220.0f) * 1.8f,       120.0f, 1.8f, 1.60f, 8.0f, 0.0f,  0.00f, "#D1D3D980", "#0000004d") \
+    X(Keyboard,       "dylv.liquidglass.keyboard",     "Keyboard",       28.0f / 220.0f, (28.0f / 220.0f) * 0.8f,       120.0f, 1.8f, 1.60f, 8.0f, 0.0f,  0.00f, "#D1D3D980", "#0000004d") \
     X(AppIcons,       "dylv.liquidglass.appicons",     "AppIcons",       28.0f / 220.0f, (28.0f / 220.0f) * 1.8f,       108.0f, 2.6f, 1.80f, 1.0f, 1.0f,  1.00f, "#FFFFFF1A", "#00000000")
 
 enum LGHostIdentifier {

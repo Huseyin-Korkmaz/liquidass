@@ -625,6 +625,10 @@ NSArray<NSDictionary *> *LGKeyboardItems(void) {
     return LGJoinItemGroups(@[
         LGRendererItemsForHostPrefix(@"Keyboard"),
         LGSettingsControlledByKey(@[
+            LGSwitchSetting(@"Keyboard.CustomFont.Enabled",
+                            LGLocalized(@"prefs.control.keyboard_custom_font"),
+                            LGLocalized(@"prefs.subtitle.keyboard_custom_font"),
+                            YES),
             LGSectionSetting(LGLocalized(@"prefs.section.keyboard_geometry.title"),
                              LGLocalized(@"prefs.section.keyboard_geometry.subtitle")),
             LGSliderSetting(@"Keyboard.CornerRadius",

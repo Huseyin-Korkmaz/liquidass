@@ -609,6 +609,7 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
 
     float2 localUV = (float2(gid) + 0.5) / float2(W, H);
     bool isCoverSheet = u.useGlyphMask < -0.5;
+    bool isKeyboard = u.useGlyphMask > 0.0 && u.useGlyphMask < 0.5;
     float2 captureUV = localUV;
     float2 capturePx = localUV * u.resolution;
     float2 px = capturePx;
@@ -701,6 +702,10 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
         }
 
         float2 lensPx = px - (isCoverSheet ? u.lensOrigin : shapeInset);
+        if (isKeyboard) {
+            fh += max(R, bezel);
+            shortest = min(fw, fh);
+        }
         float2 halfSize = float2(fw, fh) * 0.5;
         float2 p = lensPx - halfSize;
         float2 core;
@@ -775,7 +780,8 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
         edgeOpacity = clamp(1.0 - max(0.0, signedDistance), 0.0, 1.0);
     }
 
-    if (u.useGlyphMask < 0.5 && !isCoverSheet && R >= 0.5 && bezel > R) {
+    if (u.useGlyphMask < 0.5 && !isCoverSheet && !isKeyboard &&
+        R >= 0.5 && bezel > R) {
         float cornerScale = R >= shortest * 0.49 ? R
                                                  : min(R * 1.528, shortest * 0.5);
         float taper = cornerBlend * cornerBlend * (3.0 - 2.0 * cornerBlend);
@@ -791,6 +797,8 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
     float normDisp = (distFromSide < bezel) ?
         quartzGlassEdgeProfile(distFromSide,
                                min(max(u.glassThickness, 1.0), bezel)) : 0.0;
+    if ((isCoverSheet && dir.y <= -abs(dir.x)) ||
+        (isKeyboard && dir.y >= abs(dir.x))) normDisp = 0.0;
 
     float2 textureDir = dir;
     if (isCoverSheet && coverOrientation == 2.0) {
@@ -1493,6 +1501,21 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
     lu.tintColor          = darkTint ? simd_make_float4(hp->darkTintR, hp->darkTintG, hp->darkTintB, hp->darkTintStrength)
                                   : simd_make_float4(hp->tintR, hp->tintG, hp->tintB, hp->tintStrength);
 
+    if (!strcmp(hp->prefPrefix, "Keyboard")) {
+        static int keyboardGeometryLogs = 0;
+        int logIndex = __sync_fetch_and_add(&keyboardGeometryLogs, 1);
+        if (logIndex < 80) {
+            bool routedRadius = radiusIt != g_radiusRoutes.end();
+            lglog("keyboard-geometry[%d] atom=0x%x tex=%llux%llu dark=%d "
+                  "route=%d routeHost=%d hostRatio=%.6f selectedRatio=%.6f "
+                  "radius=%.3f bezelRatio=%.6f bezel=%.3f",
+                  logIndex, ftype, w, h, darkTint, routedRadius,
+                  routedRadius ? radiusIt->second.host : -1,
+                  hp->radiusRatio, radiusRatio, lu.radius,
+                  hp->bezelRatio, lu.bezelWidth);
+        }
+    }
+
     lu.backdropZoom    = !strcmp(hp->prefPrefix, "PrefsSwitch") ? 0.75f : 1.0f;
     lu.shapeScale      = 1.0f;
     if (!strcmp(hp->prefPrefix, "TabBarSelection")) {
@@ -1543,6 +1566,8 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
             float pixelsPerPoint = fminf(pixelsPerPointX, pixelsPerPointY);
             lu.bezelWidth = fmaxf(1.0f, g_clockMaskBezelWidthPoints * pixelsPerPoint);
         }
+    } else if (!strcmp(hp->prefPrefix, "Keyboard")) {
+        lu.useGlyphMask = 0.25f;
     } else if (!strcmp(hp->prefPrefix, "CoverSheet")) {
 
         lu.useGlyphMask = -1.f;
