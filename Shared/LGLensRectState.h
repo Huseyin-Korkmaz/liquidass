@@ -1,7 +1,6 @@
 #ifndef LG_LENS_RECT_STATE_H
 #define LG_LENS_RECT_STATE_H
 
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <notify.h>

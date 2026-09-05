@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
+#import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
 
 typedef NS_ENUM(NSInteger, LGDockMode) {
@@ -20,7 +21,7 @@ static BOOL dockInsideCategoryStackBackground(UIView *view) {
 }
 
 static LGDockMode dockModeForMaterial(UIView *material) {
-    // each dock family exposes different host geometry
+
     if (!isExactClass(material, @"MTMaterialView") ||
         dockInsideCategoryStackBackground(material)) return LGDockModeNone;
 
@@ -76,7 +77,7 @@ static void dockUpdateHomeButtonBorder(LGLiveBackdropView *glass,
 }
 
 static void configureDockGlass(UIView *material, LGLiveBackdropView *glass) {
-    // home button docks use a border instead of specular
+
     LGDockMode mode = dockModeForMaterial(material);
     BOOL homeButtonDock = mode == LGDockModeRegular &&
                           !dockIsFullScreenPhone(material);
@@ -85,6 +86,7 @@ static void configureDockGlass(UIView *material, LGLiveBackdropView *glass) {
 }
 
 %ctor {
+    if (!LGIsSpringBoardProcess()) return;
     LGRegisterMaterialHost(@"Dock", 80, ^BOOL(UIView *material) {
         return dockModeForMaterial(material) != LGDockModeNone;
     }, UIEdgeInsetsZero, ^CGFloat(__unused UIView *material) {

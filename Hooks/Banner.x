@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
+#import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
 
 static BOOL LGHasMaterialAncestorBefore(UIView *material, NSString *stopClassName) {
@@ -85,7 +86,7 @@ static NSAttributedString *LGAttributedTextWithColor(NSAttributedString *text, U
 }
 
 static void LGDisableLockscreenStackDimming(id controller) {
-    // stack dimming belongs to notifications and not top banners
+
     if (!controller || LGIsTopBannerPresentation([controller isKindOfClass:[UIViewController class]]
                                                    ? ((UIViewController *)controller).view : nil)) return;
     @try {
@@ -108,37 +109,63 @@ static CGFloat LGActionButtonRadius(UIView *material) {
     return CGRectGetHeight(button.bounds) * 0.5;
 }
 
-static void LGUpdatePlatterGlass(UIView *material) {
-    // one platter class serves banners notifications and action buttons
+static void *kLGLabelPlatterCheckedKey = &kLGLabelPlatterCheckedKey;
+static void *kLGLabelPlatterForcedColorKey = &kLGLabelPlatterForcedColorKey;
 
-    if (!material.window) return;
+static UIColor *LGCachedForcedPlatterTextColor(UIView *view) {
+    if (!view) return nil;
+    NSNumber *checked = objc_getAssociatedObject(view, kLGLabelPlatterCheckedKey);
+    if (!checked) {
+        UIColor *forced = LGForcedPlatterTextColor(view);
+        objc_setAssociatedObject(view, kLGLabelPlatterCheckedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, kLGLabelPlatterForcedColorKey, forced, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return forced;
+    }
+    return objc_getAssociatedObject(view, kLGLabelPlatterForcedColorKey);
+}
 
+static NSString *LGClassifyPlatterMaterial(UIView *material) {
     if (LGIsPlatterMaterial(material)) {
         BOOL topBanner = LGIsTopBannerPresentation(material);
-        NSString *prefix = topBanner ? @"Banner" : @"Notification";
-        NSString *previous = objc_getAssociatedObject(material, kLGPlatterClassificationKey);
-        if (previous && ![previous isEqualToString:prefix]) {
-            LGRemoveGlassFromMaterial(material, kGlassKey);
-        }
-        if (![previous isEqualToString:prefix]) {
-            objc_setAssociatedObject(material, kLGPlatterClassificationKey, prefix,
-                                     OBJC_ASSOCIATION_COPY_NONATOMIC);
-        }
-        LGInstallRegisteredGlassInMaterial(material, kGlassKey, prefix,
-                                           UIEdgeInsetsZero, -1.0, nil);
-    } else if (LGIsPlatterActionMaterial(material)) {
+        return topBanner ? @"Banner" : @"Notification";
+    }
+    if (LGIsPlatterActionMaterial(material)) {
+        return @"Action";
+    }
+    return @"None";
+}
 
+static void LGUpdatePlatterGlass(UIView *material) {
+    if (!material.window) return;
+
+    NSString *classification = objc_getAssociatedObject(material, kLGPlatterClassificationKey);
+    if (!classification) {
+        classification = LGClassifyPlatterMaterial(material);
+        objc_setAssociatedObject(material, kLGPlatterClassificationKey, classification,
+                                 OBJC_ASSOCIATION_COPY_NONATOMIC);
+    }
+    if ([classification isEqualToString:@"None"]) return;
+
+    if ([classification isEqualToString:@"Banner"] || [classification isEqualToString:@"Notification"]) {
+        LGInstallRegisteredGlassInMaterial(material, kGlassKey, classification,
+                                           UIEdgeInsetsZero, -1.0, nil);
+    } else if ([classification isEqualToString:@"Action"]) {
         LGInstallRegisteredGlassInMaterial(material, kGlassKey, @"Notification",
                                            UIEdgeInsetsZero,
                                            LGActionButtonRadius(material), nil);
     }
 }
 
+%group LGBannerHooks
+
 %hook MTMaterialView
 - (void)didMoveToWindow {
     %orig;
     UIView *self_ = (UIView *)self;
-    if (self_.window) LGUpdatePlatterGlass(self_);
+    if (self_.window) {
+        objc_setAssociatedObject(self_, kLGPlatterClassificationKey, nil, OBJC_ASSOCIATION_ASSIGN);
+        LGUpdatePlatterGlass(self_);
+    }
 }
 - (void)layoutSubviews {
     %orig;
@@ -148,24 +175,29 @@ static void LGUpdatePlatterGlass(UIView *material) {
 
 %hook UILabel
 - (void)setTextColor:(UIColor *)color {
-    UIColor *forced = LGForcedPlatterTextColor((UIView *)self);
+    UIColor *forced = LGCachedForcedPlatterTextColor((UIView *)self);
     if (forced) color = forced;
     %orig(color);
 }
 - (void)setAttributedText:(NSAttributedString *)text {
-    text = LGAttributedTextWithColor(text, LGForcedPlatterTextColor((UIView *)self));
+    UIColor *forced = LGCachedForcedPlatterTextColor((UIView *)self);
+    if (forced) text = LGAttributedTextWithColor(text, forced);
     %orig(text);
 }
 - (void)didMoveToWindow {
     %orig;
-    UIColor *forced = LGForcedPlatterTextColor((UIView *)self);
+    objc_setAssociatedObject(self, kLGLabelPlatterCheckedKey, nil, OBJC_ASSOCIATION_ASSIGN);
+    objc_setAssociatedObject(self, kLGLabelPlatterForcedColorKey, nil, OBJC_ASSOCIATION_ASSIGN);
+    UIColor *forced = LGCachedForcedPlatterTextColor((UIView *)self);
     if (!forced) return;
     if (self.attributedText.length) self.attributedText = LGAttributedTextWithColor(self.attributedText, forced);
     self.textColor = forced;
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     %orig(previousTraitCollection);
-    UIColor *forced = LGForcedPlatterTextColor((UIView *)self);
+    objc_setAssociatedObject(self, kLGLabelPlatterCheckedKey, nil, OBJC_ASSOCIATION_ASSIGN);
+    objc_setAssociatedObject(self, kLGLabelPlatterForcedColorKey, nil, OBJC_ASSOCIATION_ASSIGN);
+    UIColor *forced = LGCachedForcedPlatterTextColor((UIView *)self);
     if (!forced) return;
     if (self.attributedText.length) self.attributedText = LGAttributedTextWithColor(self.attributedText, forced);
     self.textColor = forced;
@@ -186,3 +218,10 @@ static void LGUpdatePlatterGlass(UIView *material) {
     LGDisableLockscreenStackDimming(self);
 }
 %end
+
+%end
+
+%ctor {
+    if (!LGIsSpringBoardProcess()) return;
+    %init(LGBannerHooks);
+}

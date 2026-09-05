@@ -240,6 +240,56 @@ BOOL LGIsPreferencesProcess(void) {
     return [LGMainBundleIdentifier() isEqualToString:@"com.apple.Preferences"];
 }
 
+BOOL LGIsExcludedSystemProcess(void) {
+    static BOOL sExcluded = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSString *bundleID = (LGMainBundleIdentifier() ?: @"").lowercaseString;
+        NSString *execPath = (NSBundle.mainBundle.executablePath ?: @"").lastPathComponent.lowercaseString;
+        NSString *procName = (NSProcessInfo.processInfo.processName ?: @"").lowercaseString;
+
+        if ([bundleID isEqualToString:@"com.apple.springboard"] ||
+            [bundleID isEqualToString:@"com.apple.preferences"] ||
+            [bundleID isEqualToString:@"com.apple.mobilesafari"] ||
+            [bundleID isEqualToString:@"com.apple.assistivetouchd"] ||
+            [procName isEqualToString:@"assistivetouchd"]) {
+            sExcluded = NO;
+            return;
+        }
+
+        if (bundleID.length == 0) {
+            sExcluded = YES;
+            return;
+        }
+
+        NSArray<NSString *> *excludedSubstrings = @[
+            @"posterboard",
+            @"posterextension",
+            @"wallpaper",
+            @"widgetrenderer",
+            @"chronod",
+            @"backboardd",
+            @"sharingd",
+            @"bluetoothd",
+            @"wifid",
+            @"powerlog",
+            @"coreauthui"
+        ];
+
+        for (NSString *substr in excludedSubstrings) {
+            if ([bundleID containsString:substr] ||
+                [execPath containsString:substr] ||
+                [procName containsString:substr]) {
+                sExcluded = YES;
+                return;
+            }
+        }
+
+        sExcluded = NO;
+    });
+    return sExcluded;
+}
+
 BOOL LGIsAtLeastiOS16(void) {
     static BOOL cached;
     static dispatch_once_t onceToken;

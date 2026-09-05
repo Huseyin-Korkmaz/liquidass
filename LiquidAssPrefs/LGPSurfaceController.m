@@ -10,6 +10,7 @@
 #import <math.h>
 #import <objc/runtime.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <notify.h>
 
 #ifndef LG_PACKAGE_VERSION
 #define LG_PACKAGE_VERSION @""
@@ -257,6 +258,7 @@ static void LGRefreshCoverSheetBezelRatioControl(UIView *root, CGFloat cornerRad
 }
 
 - (void)handleBackPressed {
+    if (self.navigationController && self.navigationController.topViewController != self) return;
     LGClearLastSurfaceIdentifierIfMatching(_screenIdentifier);
     [self.navigationController popViewControllerAnimated:YES];
 }
@@ -265,8 +267,62 @@ static void LGRefreshCoverSheetBezelRatioControl(UIView *root, CGFloat cornerRad
     LGPresentResetConfirmationWithBody(self, [self resetConfirmationBodyText], @selector(performAnimatedSurfacePreferenceReset));
 }
 
+#ifndef PROC_ALL_PIDS
+#define PROC_ALL_PIDS 1
+#endif
+
+#ifndef PROC_PIDPATHINFO_MAXSIZE
+#define PROC_PIDPATHINFO_MAXSIZE 4096
+#endif
+
+extern int proc_listpids(uint32_t type, uint32_t typeinfo, void *buffer, int buffersize);
+extern int proc_name(int pid, void *buffer, uint32_t buffersize);
+
+static void LGRestartAssistiveTouchDaemon(void) {
+
+    CFNotificationCenterPostNotification(
+        CFNotificationCenterGetDarwinNotifyCenter(),
+        CFSTR("dylv.liquidassprefs/RestartAssistiveTouch"),
+        NULL, NULL, YES);
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        int pidBufferSize = proc_listpids(PROC_ALL_PIDS, 0, NULL, 0);
+        if (pidBufferSize > 0) {
+            NSMutableData *pidData = [NSMutableData dataWithLength:(NSUInteger)pidBufferSize];
+            int bytesReturned = proc_listpids(PROC_ALL_PIDS, 0,
+                                              pidData.mutableBytes, (int)pidData.length);
+            if (bytesReturned > 0) {
+                pid_t *pids = (pid_t *)pidData.bytes;
+                int pidCount = bytesReturned / (int)sizeof(pid_t);
+                for (int i = 0; i < pidCount; i++) {
+                    pid_t pid = pids[i];
+                    if (pid <= 0 || pid == getpid()) continue;
+
+                    char processName[PROC_PIDPATHINFO_MAXSIZE];
+                    memset(processName, 0, sizeof(processName));
+                    if (proc_name(pid, processName, sizeof(processName)) <= 0) continue;
+
+                    if (strcmp(processName, "assistivetouchd") == 0) {
+                        kill(pid, SIGTERM);
+                        break;
+                    }
+                }
+            }
+        }
+    });
+}
+
 - (void)handleApplyPressed {
     LGForceSynchronizePreferences();
+    if ([_screenIdentifier isEqualToString:LGPrefsSurfaceAssistiveTouch]) {
+        CFPreferencesSetAppValue(CFSTR("AssistiveTouch.LightTintColor"), NULL, (__bridge CFStringRef)LGPrefsDomain);
+        CFPreferencesSetAppValue(CFSTR("AssistiveTouch.DarkTintColor"), NULL, (__bridge CFStringRef)LGPrefsDomain);
+        CFPreferencesAppSynchronize((__bridge CFStringRef)LGPrefsDomain);
+        LGRestartAssistiveTouchDaemon();
+        UIImpactFeedbackGenerator *generator = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+        [generator prepare];
+        [generator impactOccurred];
+    }
 }
 
 - (void)performAnimatedPreferenceReset {
@@ -658,7 +714,7 @@ static void LGRefreshCoverSheetBezelRatioControl(UIView *root, CGFloat cornerRad
 
 - (void)updatePanelsControlledByEnabledKey:(NSString *)enabledKey enabled:(BOOL)enabled animated:(BOOL)animated {
     if (!enabledKey.length) return;
-    // a panel stays disabled while any parent toggle is off
+
     for (UIView *panel in _contentStack.arrangedSubviews) {
         id dependency = objc_getAssociatedObject(panel, kLGControlledByEnabledKey);
         NSArray<NSString *> *controllerKeys = [dependency isKindOfClass:NSArray.class]
@@ -1100,6 +1156,13 @@ static void LGRefreshCoverSheetBezelRatioControl(UIView *root, CGFloat cornerRad
             [self updateScrollTopButtonAnimated:YES];
             [self refreshScrollTopButtonBackdrop];
             LGRefreshRespringBarGlass(_respringBar);
+        } else if ([item[@"key"] hasPrefix:@"Specular.Motion."] || [item[@"key"] hasSuffix:@".SpecularEnabled"]) {
+            LGWritePreference(item[@"key"], @(sender.isOn));
+            CFPreferencesSetAppValue((__bridge CFStringRef)item[@"key"],
+                                     (__bridge CFPropertyListRef)@(sender.isOn),
+                                     (__bridge CFStringRef)LGPrefsDomain);
+            CFPreferencesAppSynchronize((__bridge CFStringRef)LGPrefsDomain);
+            notify_post(LGPrefsChangedNotificationCString);
         } else {
             LGWritePreferenceAndMaybeRequireRespring(item[@"key"], @(sender.isOn));
             [self handleRespringStateChanged:nil];
@@ -1387,6 +1450,13 @@ static void LGRefreshCoverSheetBezelRatioControl(UIView *root, CGFloat cornerRad
         CGFloat value = sender.value;
         valueLabel.text = LGFormatSliderValue(value, decimals);
         LGWritePreference(preferenceKey, @(value));
+        if ([preferenceKey hasPrefix:@"Specular.Motion."] || [preferenceKey hasSuffix:@".SpecularOpacity"]) {
+            CFPreferencesSetAppValue((__bridge CFStringRef)preferenceKey,
+                                     (__bridge CFPropertyListRef)@(value),
+                                     (__bridge CFStringRef)LGPrefsDomain);
+            CFPreferencesAppSynchronize((__bridge CFStringRef)LGPrefsDomain);
+            notify_post(LGPrefsChangedNotificationCString);
+        }
         if ([preferenceKey isEqualToString:@"CoverSheet.CornerRadius"]) {
             LGRefreshCoverSheetBezelRatioControl(self.view, value);
         }

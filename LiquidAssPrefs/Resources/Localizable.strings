@@ -127,6 +127,12 @@
 "prefs.surface.keyboard.title" = "Keyboard";
 "prefs.surface.tab_bar.title" = "Tab Bar";
 "prefs.surface.tab_bar_selection.title" = "Selection Lens";
+"prefs.surface.assistive_touch.title" = "AssistiveTouch";
+"prefs.surface.assistive_touch.subtitle" = "Customize AssistiveTouch liquid glass button";
+"prefs.surface.volume_hud.title" = "Volume HUD";
+"prefs.surface.volume_hud.subtitle" = "Sidebar elastic volume slider";
+"prefs.surface.pill_hud.title" = "Pill HUDs";
+"prefs.surface.pill_hud.subtitle" = "Mute, ringer, and DND alert pills";
 "prefs.misc.respring.title" = "Respring";
 "prefs.misc.respring.subtitle" = "Restart SpringBoard";
 "prefs.misc.exit_safe_mode.title" = "Exit Safe Mode";

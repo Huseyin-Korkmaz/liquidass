@@ -105,7 +105,7 @@
 "prefs.misc.options_section.title" = "Thứ khác";
 "prefs.misc.options_section.subtitle" = "Các tính năng thử nghiệm và vài tùy chọn khác.";
 "prefs.misc.language.title" = "Ngôn ngữ";
-"prefs.control_center.fullscreen_backdrop_blur_radius.title" = "Bán kính blur toàn màn hình";
+"prefs.control_center.fullscreen_backdrop_blur_radius.title" = "Blur toàn màn hình";
 "prefs.control_center.fullscreen_backdrop_blur_radius.subtitle" = "Giới hạn blur của material nền Control Center mặc định. Giá trị thấp hơn làm blur toàn màn hình nhẹ hơn.";
 "prefs.control_center.fullscreen_backdrop_dim_color.title" = "Làm tối toàn màn hình";
 "prefs.control_center.fullscreen_backdrop_dim_color.subtitle" = "Màu phủ phía trên lớp blur toàn màn hình. Kênh alpha của màu điều khiển mức độ làm tối.";
@@ -128,8 +128,9 @@
 "prefs.control.keyboard_overhang" = "Phần mở rộng";
 "prefs.subtitle.keyboard_overhang" = "Chiều cao bổ sung phía trên bàn phím khi thanh dự đoán bị ẩn.";
 
-/* TODO: Translate synced English fallback strings. */
 "prefs.control.bezel_ratio" = "Bezel Ratio";
+"prefs.control.exposure_boost" = "Tăng sáng (Exposure)";
+"prefs.subtitle.exposure_boost" = "Điều chỉnh độ sáng và độ phơi sáng của glass.";
 "prefs.control.light_tint_color" = "Light Tint";
 "prefs.control.dark_tint_color" = "Dark Tint";
 "prefs.subtitle.bezel_ratio" = "Width of the refracting edge relative to the glass view's short side.";
@@ -149,7 +150,7 @@
 "prefs.surface.group.system.subtitle" = "Shared system controls available across apps.";
 "prefs.surface.coversheet.title" = "Cover Sheet Pull";
 "prefs.surface.keyboard.title" = "Keyboard";
-"prefs.surface.tab_bar.title" = "Tab Bar";
+"prefs.surface.tab_bar.title" = "Tab Bar (TabView)";
 "prefs.surface.tab_bar_selection.title" = "Selection Lens";
 "prefs.surface.global_controls.title" = "Controls";
 "prefs.global_controls.exclusions.title" = "Exclusion List";
@@ -169,10 +170,8 @@
 "prefs.global_controls.segmented.title" = "Segmented Controls";
 "prefs.global_controls.segmented.subtitle" = "Add liquid selection behavior to segmented controls.";
 
-/* TODO: Translate synced English fallback strings. */
 "prefs.button.more" = "More";
 
-/* TODO: Translate synced English fallback strings. */
 "prefs.app_icons_warning.title" = "Enable App Icons?";
 "prefs.app_icons_warning.body" = "Be aware that enabling app icons will be VERY laggy. DO NOT complain about lag issues if you have this surface enabled, thank you.";
 "prefs.app_icons_warning.confirm" = "Enable";
@@ -182,7 +181,6 @@
 "prefs.misc.debug_logging.title" = "Debug Logging";
 "prefs.misc.debug_logging.subtitle" = "Writes verbose diagnostics to liquidglass.log. Leave off unless you are troubleshooting.";
 
-/* TODO: Translate synced English fallback strings. */
 "prefs.misc.exit_safe_mode.title" = "Exit Safe Mode";
 "prefs.misc.exit_safe_mode.subtitle" = "Exit Liquid (Gl)ass safe mode if active.";
 "prefs.control.keyboard_key_radius" = "Key Corner Radius";
@@ -190,7 +188,6 @@
 "prefs.misc.export_logs.title" = "Export Logs";
 "prefs.export_logs.none" = "No saved logs were found.";
 
-/* TODO: Translate synced English fallback strings. */
 "prefs.control.bezel_width" = "Bezel Width";
 "prefs.subtitle.bezel_width" = "Width of the refracting edge around the clock glyphs, in points.";
 "prefs.section.lockscreen_date_label.title" = "Date Label";

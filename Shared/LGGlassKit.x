@@ -1,9 +1,8 @@
 #import "LGGlassKit.h"
 #import "LGLiveBackdropView.h"
 #import "LGHostRegistry.h"
+#import "LGSharedSupport.h"
 #import <objc/runtime.h>
-
-#pragma mark - class / ancestry helpers
 
 BOOL hasAncestorOfClassName(UIView *v, NSString *clsName) {
     Class cls = NSClassFromString(clsName);
@@ -22,8 +21,6 @@ BOOL ancestorNameContains(UIView *v, NSString *sub) {
 BOOL isExactClass(UIView *v, NSString *name) {
     return v && [NSStringFromClass(v.class) isEqualToString:name];
 }
-
-#pragma mark - per-host enable prefs
 
 BOOL LGProcessMatchesExclusionList(NSString *list) {
     if (!list.length) return NO;
@@ -71,8 +68,6 @@ BOOL lgHostEnabled(NSString *prefix) {
     if ([prefix isEqualToString:@"AppIcons"]) return NO;
     return YES;
 }
-
-#pragma mark - uniform injection registry
 
 @interface LGGlassRec : NSObject
 @property (nonatomic, copy) NSString *prefix;
@@ -125,8 +120,6 @@ void lgSuppressStock(UIView *v, NSString *prefix, BOOL setHidden) {
     if (!sSuppressed) sSuppressed = [NSMapTable weakToStrongObjectsMapTable];
     [sSuppressed setObject:prefix forKey:v];
 }
-
-#pragma mark - registered material lifecycle
 
 LGLiveBackdropView *LGCreateRegisteredGlass(CGRect frame,
                                              NSString *groupName,
@@ -194,7 +187,7 @@ void LGRegisterMaterialHost(NSString *prefix,
     route.groupName = groupName;
     route.postInstall = [postInstall copy];
     [sMaterialHostRoutes addObject:route];
-    // priority makes one host own each material
+
     [sMaterialHostRoutes sortUsingComparator:^NSComparisonResult(LGMaterialHostRoute *a,
                                                                    LGMaterialHostRoute *b) {
         if (a.priority == b.priority) return [a.prefix compare:b.prefix];
@@ -219,7 +212,7 @@ static void lgRouteMaterialHost(UIView *material) {
 }
 
 static void lgReconcileInjectionsForDisable(void) {
-    // disabled hosts must restore stock views and remove live glass
+
     if (sGlassRecs.count) {
         for (UIView *glass in sGlassRecs.keyEnumerator.allObjects) {
             LGGlassRec *r = [sGlassRecs objectForKey:glass];
@@ -256,7 +249,7 @@ __attribute__((constructor)) static void lgGlassInitEnableObserver(void) {
         NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 
-#pragma mark - shared material lifecycle
+%group LGSharedMaterialKitRouting
 
 %hook MTMaterialView
 
@@ -277,3 +270,11 @@ __attribute__((constructor)) static void lgGlassInitEnableObserver(void) {
 - (void)setCenter:(CGPoint)center{ %orig(center); LGResyncGlassGeometry((UIView *)self, kGlassKey); }
 
 %end
+
+%end
+
+%ctor {
+    if (LGIsSpringBoardProcess()) {
+        %init(LGSharedMaterialKitRouting);
+    }
+}

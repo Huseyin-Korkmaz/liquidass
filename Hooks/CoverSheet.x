@@ -675,7 +675,7 @@ static void LGCoverSheetRegisterWallpaperController(UIViewController *controller
 
 static void LGCoverSheetUpdateBottomCornerMask(LGLiveBackdropView *glass) {
     if (!glass || CGRectIsEmpty(glass.bounds)) return;
-    // the layer transform rotates this local bottom edge into place
+
     CAShapeLayer *mask =
         objc_getAssociatedObject(glass, kLGCoverSheetMaskKey);
     if (!mask) {
@@ -777,7 +777,6 @@ static void LGCoverSheetSyncGlassGeometry(UIView *panel,
                                           LGLiveBackdropView *glass) {
     if (!panel || !glass || glass.superview != panel.superview) return;
 
-    // presentation geometry keeps the glass attached during interactive pulls
     CALayer *modelLayer = panel.layer;
     CALayer *sourceLayer = modelLayer.presentationLayer ?: modelLayer;
     BOOL modelLandscape = CGRectGetWidth(modelLayer.bounds) >
@@ -1062,6 +1061,8 @@ static void LGCoverSheetSetMode(LGCoverSheetMode mode) {
     sLGCoverSheetFadeToHome = NO;
 }
 
+%group LGCoverSheetHooks
+
 %hook SBCoverSheetPanelBackgroundContainerView
 
 - (void)didMoveToWindow {
@@ -1106,7 +1107,6 @@ static void LGCoverSheetSetMode(LGCoverSheetMode mode) {
 }
 
 %end
-
 
 static void LGCoverSheetProbeCapabilities(id manager) {
     if (!LGDebugLoggingEnabled()) return;
@@ -1231,7 +1231,6 @@ static void LGCoverSheetHandleAnimationTick(id self, id controller, double progr
         }
     }
 
-    
 }
 
 static void LGCoverSheetHandleTransitionEnd(id self, id controller,
@@ -1449,7 +1448,6 @@ prepareForDismissalTransitionForReversingTransition:(BOOL)reversing
     LGCoverSheetSetMode(LGCoverSheetModeIdle);
 }
 
-
 - (void)_setCoverSheetPresented:(BOOL)presented
                  forcePresented:(BOOL)forcePresented
                        animated:(BOOL)animated
@@ -1525,7 +1523,11 @@ prepareForDismissalTransitionForReversingTransition:(BOOL)reversing
 
 %end
 
+%end
+
 %ctor {
+    if (!LGIsSpringBoardProcess()) return;
+    %init(LGCoverSheetHooks);
     sLGCoverSheetPanels = [NSHashTable weakObjectsHashTable];
     sLGCoverSheetWallpaperControllers = [NSHashTable weakObjectsHashTable];
     lgObservePreferenceReload(^{

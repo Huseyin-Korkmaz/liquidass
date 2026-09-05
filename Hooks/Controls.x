@@ -10,6 +10,7 @@
 #import "../Shared/LGGlassKit.h"
 #import "../Shared/LGLiquidMotion.h"
 #import "../Shared/LGLensRectState.h"
+#import "../LGFramework/LGButtonView.h"
 
 static void *kLGSettingsSwitchOverlayKey = &kLGSettingsSwitchOverlayKey;
 static void *kLGSettingsSliderOverlayKey = &kLGSettingsSliderOverlayKey;
@@ -309,83 +310,19 @@ static UIColor *LGSidebarTintBaseColor(void) {
 }
 @end
 
-@interface LGSettingsBackButton : UIControl
-@property (nonatomic, strong) LGLiveBackdropView *glass;
-@property (nonatomic, strong) UIImageView *glyph;
-@property (nonatomic, weak) UINavigationController *navigationController;
+@interface LGSettingsBackButton : LGButtonView
 @property (nonatomic, weak) UIView *stockButton;
-@property (nonatomic, strong) UIViewPropertyAnimator *pressAnimator;
 @end
 
-static void LGSettingsPerformSoftHaptic(void) {
-    if (@available(iOS 13.0, *)) {
-        UIImpactFeedbackGenerator *generator =
-            [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleSoft];
-        [generator prepare];
-        [generator impactOccurred];
-    }
-}
-
 @implementation LGSettingsBackButton
+
 - (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
+    self = [super initWithFrame:frame symbolName:@"chevron.left" blurRadius:2.0];
     if (!self) return nil;
-    self.backgroundColor = UIColor.clearColor;
-    _glass = LGCreateRegisteredGlass(self.bounds, nil, @"PrefsButton");
-    _glass.userInteractionEnabled = NO;
-    [self addSubview:_glass];
-    UIImageSymbolConfiguration *configuration =
-        [UIImageSymbolConfiguration configurationWithPointSize:24
-                                                        weight:UIImageSymbolWeightRegular];
-    _glyph = [[UIImageView alloc] initWithImage:
-        [UIImage systemImageNamed:@"chevron.left" withConfiguration:configuration]];
-    _glyph.tintColor = UIColor.labelColor;
-    _glyph.contentMode = UIViewContentModeCenter;
-    _glyph.userInteractionEnabled = NO;
-    [self addSubview:_glyph];
-    [self addTarget:self action:@selector(lg_touchDown)
-        forControlEvents:UIControlEventTouchDown];
     [self addTarget:self action:@selector(lg_pop) forControlEvents:UIControlEventTouchUpInside];
     return self;
 }
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    self.glass.frame = self.bounds;
-    CGFloat radius = CGRectGetHeight(self.bounds) * 0.5;
-    self.layer.cornerRadius = radius;
-    self.layer.cornerCurve = kCACornerCurveContinuous;
-    self.glass.layer.cornerRadius = radius;
-    self.glass.layer.cornerCurve = kCACornerCurveContinuous;
-    self.glass.layer.masksToBounds = YES;
-    self.glyph.frame = self.bounds;
-}
-- (void)lg_touchDown {
-    LGSettingsPerformSoftHaptic();
-}
-- (void)setHighlighted:(BOOL)highlighted {
-    [super setHighlighted:highlighted];
-    CALayer *presentation = self.layer.presentationLayer;
-    if (presentation) self.transform = CATransform3DGetAffineTransform(presentation.transform);
-    [self.pressAnimator stopAnimation:YES];
-    CGFloat mass = 0.8;
-    CGFloat stiffness = 300.0;
-    CGFloat damping = highlighted ? 18.0 : 12.0;
-    CGFloat velocity = highlighted ? 0.5 : 1.0;
-    CGFloat duration = highlighted ? 0.3 : 0.5;
-    UISpringTimingParameters *timing = [[UISpringTimingParameters alloc]
-        initWithMass:mass stiffness:stiffness damping:damping
-        initialVelocity:CGVectorMake(velocity, velocity)];
-    self.pressAnimator = [[UIViewPropertyAnimator alloc]
-        initWithDuration:duration timingParameters:timing];
-    __weak typeof(self) weakSelf = self;
-    [self.pressAnimator addAnimations:^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
 
-        strongSelf.transform = highlighted ? CGAffineTransformMakeScale(1.16, 1.16)
-                                            : CGAffineTransformIdentity;
-    }];
-    [self.pressAnimator startAnimation];
-}
 - (BOOL)lg_invokeView:(UIView *)view {
     if ([view isKindOfClass:UIControl.class] &&
         ((UIControl *)view).allTargets.count > 0) {
@@ -414,6 +351,7 @@ static void LGSettingsPerformSoftHaptic(void) {
         if ([self lg_invokeView:subview]) return YES;
     return NO;
 }
+
 - (void)lg_pop {
     if (![self lg_invokeView:self.stockButton])
         [self.navigationController popViewControllerAnimated:YES];
@@ -445,9 +383,9 @@ static void LGRefreshGlobalControlEnablement(void) {
     gLGSwitchControlsEnabled = allowed &&
         LGGlobalControlPreferenceEnabled(@"GlobalControls.Switches.Enabled", YES);
     gLGSliderControlsEnabled = allowed &&
-        LGGlobalControlPreferenceEnabled(@"GlobalControls.Sliders.Enabled", NO);
+        LGGlobalControlPreferenceEnabled(@"GlobalControls.Sliders.Enabled", YES);
     gLGSegmentControlsEnabled = allowed &&
-        LGGlobalControlPreferenceEnabled(@"GlobalControls.Segmented.Enabled", NO);
+        LGGlobalControlPreferenceEnabled(@"GlobalControls.Segmented.Enabled", YES);
 }
 
 static BOOL LGInsideLiquidAssPrefs(UIView *view) {
@@ -640,7 +578,7 @@ static void LGSuppressNativeSliderContents(UISlider *owner,
 }
 
 static UIView *LGSettingsSliderOverlayContainer(UISlider *owner) {
-    // mount outside the stock slider so value labels stay untouched
+
     UIView *start = owner.superview ?: owner;
     UIView *container = start;
     for (UIView *candidate = start; candidate; candidate = candidate.superview) {
@@ -770,7 +708,6 @@ static void LGSegmentSetGestureClipping(LGSegmentMotionState *state,
                                         UISegmentedControl *control,
                                         BOOL clipping);
 
-
 static const CGFloat kLGSegmentShapeScale = 0.70;
 static NSArray<UIView *> *LGSegmentViews(UISegmentedControl *control) {
     NSMutableArray<UIView *> *segments = [NSMutableArray array];
@@ -862,7 +799,7 @@ static void LGSegmentApplyRendered(LGSegmentMotionState *state);
         CGFloat elapsed = (CGFloat)(now - _settleStart);
         CGFloat t = kLGSegmentSpringEaseIn > 0.0
             ? fmin(1.0, elapsed / kLGSegmentSpringEaseIn) : 1.0;
-        CGFloat eased = t * t * (3.0 - 2.0 * t);            // smoothstep
+        CGFloat eased = t * t * (3.0 - 2.0 * t);
         CGFloat ease = kLGSegmentSpringEaseFloor +
                        (1.0 - kLGSegmentSpringEaseFloor) * eased;
         CGFloat response = kLGSegmentSpringResponse / ease;
@@ -1045,7 +982,6 @@ static void LGInstallSettingsSegment(UISegmentedControl *control) {
     control.clipsToBounds = NO;
     control.layer.masksToBounds = NO;
 
-
     if (@available(iOS 13.0, *))
         glass.layer.cornerCurve = kCACornerCurveContinuous;
 
@@ -1127,7 +1063,7 @@ static void LGSegmentContinueTracking(UISegmentedControl *control, CGPoint point
         state.dragged = YES;
         LGSegmentPresentGlass(control, state);
     }
-    if (!state.dragged) return;   // still a tap, leave it to the stock control
+    if (!state.dragged) return;
     state.velocityX = LGLiquidFilteredVelocity(state.velocityX,
                                                (point.x - state.lastTouchX) / dt);
     state.lastTouchX = point.x;
@@ -1440,11 +1376,18 @@ static void LGUpdateSettingsBackButton(UINavigationBar *bar) {
 
     CGFloat leading = MAX(16.0, bar.safeAreaInsets.left + 8.0);
     CGFloat y = floor(CGRectGetMidY(content.bounds) - 22.0);
-    button.frame = CGRectMake(floor(leading), y, 44.0, 44.0);
+    if (!button.isPressed) {
+        button.frame = CGRectMake(floor(leading), y, 44.0, 44.0);
+    }
     stock.hidden = YES;
     stock.alpha = 0.0;
     stock.userInteractionEnabled = NO;
     [content bringSubviewToFront:button];
+    button.layer.zPosition = 9999;
+    content.clipsToBounds = NO;
+    content.layer.masksToBounds = NO;
+    bar.clipsToBounds = NO;
+    bar.layer.masksToBounds = NO;
 }
 
 static BOOL LGViewTreeHasSpeechRateEndpoints(UIView *root) {
@@ -1563,9 +1506,6 @@ static void LGSettingsSuppressModernSwitchElementIfNeeded(UIView *element) {
         element.alpha = 0.0;
 }
 
-
-#pragma mark - iPad floating sidebar
-
 static const CGFloat kLGSidebarInset = 12.0;
 static const CGFloat kLGSearchBarHeightScale = 1.25;
 static const CGFloat kLGSearchFieldHeightScale = 1.30;
@@ -1640,7 +1580,6 @@ static BOOL LGIsSettingsSidebarContainer(UIView *view) {
 }
 
 static void *kLGSidebarAppliedKey = &kLGSidebarAppliedKey;
-
 
 static const CGFloat kLGSidebarPressScale = 1.01;
 static const CGFloat kLGSidebarGlowDiameterScale = 2.2;
@@ -1977,9 +1916,6 @@ static void LGResetSettingsSidebar(UIView *container) {
                              OBJC_ASSOCIATION_ASSIGN);
 }
 
-
-#pragma mark - sidebar probe
-
 static void *kLGSidebarProbeKey = &kLGSidebarProbeKey;
 
 static void LGProbeAppend(NSMutableString *out, UIView *view, NSUInteger depth,
@@ -2198,7 +2134,6 @@ static void LGUpdateSettingsSidebar(UIView *container) {
         LGLayoutSidebarPanel(LGEnsureSidebarPanel(container), inset);
     }
 }
-
 
 %hook UISwitchModernVisualElement
 - (void)didMoveToSuperview {
@@ -2443,7 +2378,6 @@ static void LGUpdateSettingsSidebar(UIView *container) {
 }
 %end
 
-
 %hook UISplitViewController
 
 - (void)viewDidLayoutSubviews {
@@ -2458,7 +2392,6 @@ static void LGUpdateSettingsSidebar(UIView *container) {
 }
 
 %end
-
 
 @interface PSKeyboardNavigationSearchBar : UISearchBar
 @end
@@ -2573,6 +2506,7 @@ static void LGUpdateSettingsSidebar(UIView *container) {
 %end
 
 %ctor {
+    if (LGIsExcludedSystemProcess()) return;
     NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier ?: @"";
 
     if ([bundleIdentifier isEqualToString:@"com.apple.springboard"]) return;

@@ -218,7 +218,7 @@ void LGSetNeedsRespring(BOOL needsRespring) {
 }
 
 void LGForceSynchronizePreferences(void) {
-    // controls stage values until apply commits one coherent snapshot
+
     LGEnsurePendingPreferencesInitialized();
 
     NSDictionary<NSString *, id> *pendingValues = [sLGPendingPreferences copy];
@@ -456,16 +456,19 @@ NSArray<NSDictionary *> *LGRendererItemsForHostPrefix(NSString *prefix) {
                         host->dispersionStrength, 1.0, dispersionMax, 1),
         LGGlassSpecularSetting(key(@"SpecularOpacity"), host->specularOpacity, 0.0, 1.0, 2),
         LGGlassBlurSetting(key(@"Blur"), host->blur, 0.0, 50.0, 1),
-        @{
+    ]];
+    if (![prefix isEqualToString:@"AssistiveTouch"]) {
+        [items addObject:@{
             @"type": @"color", @"key": key(@"LightTintColor"),
             @"title": LGLocalized(@"prefs.control.light_tint_color"),
             @"subtitle": LGLocalized(@"prefs.subtitle.light_tint_color"), @"default": lightTint
-        }, @{
+        }];
+        [items addObject:@{
             @"type": @"color", @"key": key(@"DarkTintColor"),
             @"title": LGLocalized(@"prefs.control.dark_tint_color"),
             @"subtitle": LGLocalized(@"prefs.subtitle.dark_tint_color"), @"default": darkTint
-        },
-    ]];
+        }];
+    }
     if ([prefix isEqualToString:@"CoverSheet"]) {
         [items insertObject:LGSliderSetting(key(@"CornerRadius"),
                                             LGLocalized(@"prefs.control.corner_radius"),
@@ -893,10 +896,10 @@ NSArray<NSDictionary *> *LGGlobalControlsItems(void) {
                         LGLocalized(@"prefs.global_controls.switches.subtitle"), YES),
         LGSwitchSetting(@"GlobalControls.Sliders.Enabled",
                         LGLocalized(@"prefs.global_controls.sliders.title"),
-                        LGLocalized(@"prefs.global_controls.sliders.subtitle"), NO),
+                        LGLocalized(@"prefs.global_controls.sliders.subtitle"), YES),
         LGSwitchSetting(@"GlobalControls.Segmented.Enabled",
                         LGLocalized(@"prefs.global_controls.segmented.title"),
-                        LGLocalized(@"prefs.global_controls.segmented.subtitle"), NO),
+                        LGLocalized(@"prefs.global_controls.segmented.subtitle"), YES),
     ];
 }
 

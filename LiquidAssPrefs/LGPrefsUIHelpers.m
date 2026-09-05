@@ -2,6 +2,7 @@
 #import "LGPrefsDataSupport.h"
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGSharedSupport.h"
+#import "../LGFramework/LGButtonView.h"
 #import <notify.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -421,7 +422,14 @@ UIView *LGMakeSectionDivider(void) {
 }
 
 UIBarButtonItem *LGMakeCircularBackItem(id target, SEL action) {
-    LGLiveGlassBarButton *button = [[LGLiveGlassBarButton alloc] initWithTarget:target action:action symbolName:@"chevron.left"];
+    LGButtonView *button = [[LGButtonView alloc] initWithFrame:CGRectMake(0.0, 0.0, 44.0, 44.0)
+                                                    symbolName:@"chevron.left"
+                                                    blurRadius:2.0];
+    button.clipsToBounds = NO;
+    button.layer.masksToBounds = NO;
+    [button addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
+    [button.widthAnchor constraintEqualToConstant:44.0].active = YES;
+    [button.heightAnchor constraintEqualToConstant:44.0].active = YES;
     return [[UIBarButtonItem alloc] initWithCustomView:button];
 }
 
@@ -448,18 +456,23 @@ UIBarButtonItem *LGMakeCircularMenuItem(id target, SEL applyAction, SEL resetAct
         }
     }];
     UIMenu *menu = [UIMenu menuWithTitle:@"" children:@[ apply, reset ]];
-    LGLiveGlassBarButton *button = [[LGLiveGlassBarButton alloc]
-        initWithTarget:nil action:nil symbolName:@"line.3.horizontal"];
+    LGButtonView *button = [[LGButtonView alloc] initWithFrame:CGRectMake(0.0, 0.0, 44.0, 44.0)
+                                                    symbolName:@"line.3.horizontal"
+                                                    blurRadius:2.0];
+    button.clipsToBounds = NO;
+    button.layer.masksToBounds = NO;
     [button setPrimaryMenu:menu];
     button.accessibilityLabel = LGLocalized(@"prefs.button.more");
+    [button.widthAnchor constraintEqualToConstant:44.0].active = YES;
+    [button.heightAnchor constraintEqualToConstant:44.0].active = YES;
     UIBarButtonItem *item = [[UIBarButtonItem alloc] initWithCustomView:button];
     item.accessibilityLabel = button.accessibilityLabel;
     return item;
 }
 
 void LGRefreshCircularBackItem(UIBarButtonItem *item) {
-    if ([item.customView isKindOfClass:[LGLiveGlassBarButton class]]) {
-        [(LGLiveGlassBarButton *)item.customView refreshGlass];
+    if ([item.customView respondsToSelector:@selector(refreshGlass)]) {
+        [(LGButtonView *)item.customView refreshGlass];
     }
 }
 

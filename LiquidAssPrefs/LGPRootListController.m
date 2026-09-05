@@ -116,6 +116,7 @@ static NSString *LGFormatRuntimeCacheUsage(unsigned long long bytes) {
 }
 
 - (void)handleBackPressed {
+    if (self.navigationController && self.navigationController.topViewController != self) return;
     [self.navigationController popViewControllerAnimated:YES];
 }
 

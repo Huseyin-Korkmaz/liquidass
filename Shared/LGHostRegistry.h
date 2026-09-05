@@ -19,7 +19,6 @@ typedef struct {
     const char *darkTintHex;
 } LGHostDefinition;
 
-//   name             filter                           pref              radii           bezel                          thick   refr  index  blur  spec   disp   light        dark
 #define LG_HOST_REGISTRY(X) \
     X(Default,        "dylv.liquidglass.refraction",   "Default",        28.0f / 220.0f, (28.0f / 220.0f) * 1.8f,       108.0f, 2.6f, 1.80f, 1.0f, 1.0f,  2.00f, "#FFFFFF1A", "#00000000") \
     X(FolderIcon,     "dylv.liquidglass.folder",       "FolderIcon",     28.0f / 220.0f, (28.0f / 220.0f) * 1.8f,       108.0f, 2.6f, 1.80f, 1.0f, 1.0f,  1.00f, "#FFFFFF1A", "#00000000") \
@@ -46,7 +45,10 @@ typedef struct {
     X(TabBar,         "dylv.liquidglass.tabbar",       "TabBar",         0.50f,          0.50f,                         108.0f, 2.2f, 1.80f, 3.0f, 1.0f,  2.00f, "#FFFFFF80", "#2A2A2D80") \
     X(TabBarSelection,"dylv.liquidglass.tabbarselect", "TabBarSelection",0.50f,          (28.0f / 220.0f) * 1.2f,       132.0f, 1.4f, 1.60f, 0.0f, 1.0f,  0.50f, "#FFFFFF1A", "#FFFFFF0D") \
     X(Keyboard,       "dylv.liquidglass.keyboard",     "Keyboard",       28.0f / 220.0f, (28.0f / 220.0f) * 0.8f,       120.0f, 1.8f, 1.60f, 8.0f, 0.0f,  0.00f, "#D1D3D980", "#0000004d") \
-    X(AppIcons,       "dylv.liquidglass.appicons",     "AppIcons",       28.0f / 220.0f, (28.0f / 220.0f) * 1.8f,       108.0f, 2.6f, 1.80f, 1.0f, 1.0f,  1.00f, "#FFFFFF1A", "#00000000")
+    X(AppIcons,       "dylv.liquidglass.appicons",     "AppIcons",       28.0f / 220.0f, (28.0f / 220.0f) * 1.8f,       108.0f, 2.6f, 1.80f, 1.0f, 1.0f,  1.00f, "#FFFFFF1A", "#00000000") \
+    X(AssistiveTouch, "dylv.liquidglass.assistivetouch","AssistiveTouch", 0.50f,          0.38f,                         18.0f,  2.75f, 2.10f, 0.5f, 0.35f, 0.00f, "#00000000", "#00000000") \
+    X(VolumeHUD,      "dylv.liquidglass.volumehud",    "VolumeHUD",      0.50f,          0.35f,                         280.0f, 3.00f, 3.20f, 5.0f, 0.35f, 1.20f, "#FFFFFF99", "#FFFFFF66") \
+    X(PillHUD,        "dylv.liquidglass.pillhud",      "PillHUD",        0.50f,          0.35f,                         120.0f, 2.2f, 1.70f, 1.0f, 0.35f, 1.20f, "#FFFFFF1A", "#0000002E")
 
 enum LGHostIdentifier {
 #define LG_HOST_ENUM(identifier, ...) LGHostIdentifier##identifier,

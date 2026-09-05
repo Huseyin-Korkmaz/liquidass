@@ -25,7 +25,6 @@
 #endif
 #endif
 
-// apparently the only path backboardd could write to outside /tmp/ or /var/jb/*
 #define LG_LOG_PATH "/var/mobile/Library/Accessibility/liquidglass.log"
 #define LG_SAFE_MODE_LOG_PATH "/var/mobile/Library/Accessibility/liquidass-safemode.log"
 #define LG_SAFE_MODE_STATE_PATH "/var/mobile/Library/Accessibility/liquidass-backboardd-guard.bin"
@@ -252,10 +251,8 @@ static void *logResolveResult(const char *label, void *resolved) {
     return resolved;
 }
 
-// must match the springboard filter type
 static const char *kCustomFilterTypeName = "dylv.liquidglass.refraction";
 
-// resolved from quartzcore at startup
 static ptrdiff_t g_cmdBufOffset = -1;
 
 static ptrdiff_t g_sourceTextureOffset = -1;
@@ -263,10 +260,8 @@ static ptrdiff_t g_destinationTextureOffset = -1;
 static ptrdiff_t g_contextDestSurfaceOffset = -1;
 static ptrdiff_t g_filterAtomOffset = 0x18;
 
-// cloned descriptors need every slot through edge info
 static const size_t kVtableSlots = 22;
 
-// match msl natural 8-byte alignment for float2 to prevent struct field layout desync from padding
 typedef struct {
     simd_float2 resolution;
     simd_float2 outputResolution;
@@ -326,15 +321,15 @@ typedef uint64_t (*EdgeInfoFn)(void*, void*, void*, void*, void*,
 static StopEncodersFn  g_stopEncoders   = nullptr;
 static InternAtomFn    g_internAtom     = nullptr;
 static AddFilterFn     g_addFilter      = nullptr;
-static Render13Fn      g_origGaussR13   = nullptr; // original render we call after our pass
+static Render13Fn      g_origGaussR13   = nullptr;
 static Render14Fn      g_origGaussR14   = nullptr;
 static IdentityFn      g_origGaussIdentity = nullptr;
 static EdgeInfoFn      g_origGaussEdgeInfo = nullptr;
-static void           *g_gaussCtxValue  = nullptr; // raw gaussian vtable ptr (stripped)
+static void           *g_gaussCtxValue  = nullptr;
 static bool            g_filterRegistered = false;
 
-static void  **g_customVtable = nullptr; // mmapped 22-slot cloned gaussian vtable
-static void   *g_customCtx    = nullptr; // mmapped filtersubclass-shaped block
+static void  **g_customVtable = nullptr;
+static void   *g_customCtx    = nullptr;
 
 typedef void (*MSHookFunctionFn)(void *, void *, void **);
 static MSHookFunctionFn g_hookFunction = nullptr;
@@ -405,7 +400,6 @@ typedef struct {
     float bezelWidthPoints;
 } LGClockSharedMaskHeader;
 
-// clear arc globals before cxa finalization
 __attribute__((destructor))
 static void liquidGlassShutdown(void) {
     g_shaderLibrary = nil;
@@ -741,7 +735,8 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
             cornerBlend = saturate(min(q.x, q.y) /
                                    max(min(extent.x, extent.y), 0.001));
         }
-        if (signedDistance > 1.0) {
+        float kEdgeAA = 1.75;
+        if (signedDistance > (subShape ? kEdgeAA : 1.0)) {
             return subShape ? float4(0.0) : src.sample(s, captureUV);
         }
 
@@ -777,7 +772,12 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
             dir = float2((dL < dR && dL == dm) ? -1.0 : (dR <= dL && dR == dm) ?  1.0 : 0.0,
                          (dT < dB && dT == dm) ? -1.0 : (dB <= dT && dB == dm) ?  1.0 : 0.0);
         }
-        edgeOpacity = clamp(1.0 - max(0.0, signedDistance), 0.0, 1.0);
+        if (subShape) {
+            edgeOpacity = saturate((kEdgeAA - signedDistance) / (kEdgeAA + 0.75));
+            edgeOpacity = edgeOpacity * edgeOpacity * (3.0 - 2.0 * edgeOpacity);
+        } else {
+            edgeOpacity = clamp(1.0 - max(0.0, signedDistance), 0.0, 1.0);
+        }
     }
 
     if (u.useGlyphMask < 0.5 && !isCoverSheet && !isKeyboard &&
@@ -887,7 +887,7 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
     highlight *= mix(0.32, 1.0, luminance);
     highlight = min(highlight, 0.22);
     outRGB = 1.0 - (1.0 - outRGB) * (1.0 - highlight);
-    return float4(outRGB, edgeOpacity);
+    return float4(outRGB * edgeOpacity, edgeOpacity);
 }
 
 struct LGVertexOut {
@@ -924,7 +924,7 @@ fragment float4 liquidGlassFragment(
 static void ensurePipeline(__unsafe_unretained id<MTLDevice> device) {
     os_unfair_lock_lock(&g_pipelineLock);
     if (!g_pipelineInit) {
-        g_pipelineInit = true; // set first so a compile failure doesnt spin
+        g_pipelineInit = true;
 
         NSError *err = nil;
         NSString *src = [NSString stringWithUTF8String:kShaderSrc];
@@ -1187,15 +1187,13 @@ lgClockMaskTexture(__unsafe_unretained id<MTLDevice> device) {
     return texture;
 }
 
-// radius and bezel scale from the shortest surface side
-
 static const float kCornerRadiusRatio = 28.0f / 220.0f;
 static const float kBezelWidthRatio   = kCornerRadiusRatio * 1.8f;
 
 static const float kMaxBezelPx        = 34.0f;
 
 static void ensureUniforms(__unsafe_unretained id<MTLDevice> device, uint64_t w, uint64_t h) {
-    if (g_uniformsBuf) return; // buffer itself only needs allocating once
+    if (g_uniformsBuf) return;
 
     g_uniformsBuf = [device newBufferWithLength:sizeof(LGUniforms)
                                         options:MTLResourceStorageModeShared];
@@ -1203,7 +1201,6 @@ static void ensureUniforms(__unsafe_unretained id<MTLDevice> device, uint64_t w,
 
     LGUniforms *u = (LGUniforms *)g_uniformsBuf.contents;
 
-    // unused placeholder kept for uniform layout
     u->screenResolution = simd_make_float2(750.f, 1334.f);
     u->cardOrigin               = simd_make_float2(0.f, 0.f);
     u->glassThickness          = 18.f;
@@ -1403,6 +1400,10 @@ static void lgReloadHostPrefs(void) {
             g_hostParams[i].darkTintB = tint.z; g_hostParams[i].darkTintStrength = tint.w;
             overrides++;
         }
+        if (i == LGHostIdentifierAssistiveTouch) {
+            g_hostParams[i].tintStrength = 0.0f;
+            g_hostParams[i].darkTintStrength = 0.0f;
+        }
     }
     g_hostParamsInit = true;
 
@@ -1435,7 +1436,6 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
     static uint64_t tsum_stop = 0, tsum_ours = 0, tsum_gauss = 0, tcount = 0;
     uint64_t t_start = mach_absolute_time();
 
-    // trace only the first calls so render logs stay usable
     static uint64_t g_traceCalls = 0;
     uint64_t callN = ++g_traceCalls;
 #define R13TRACE(...) do { if (callN <= 3) lglog(__VA_ARGS__); } while (0)
@@ -1521,7 +1521,7 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
     if (!strcmp(hp->prefPrefix, "TabBarSelection")) {
         LGLensRectSlot lens = {};
         if (LGLensRectRead(LGLensRectSlotTabBarSelection, &lens)) {
-            lu.backdropZoom = 0.85f;
+            lu.backdropZoom = 0.80f;
             lu.shapeScale   = 1.0f;
             lu.shapeOrigin  = simd_make_float2(lens.originXRatio * (float)w,
                                                lens.originYRatio * (float)h);
@@ -1759,7 +1759,6 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
 #undef R13TRACE
 }
 
-// cloned descriptors must report non identity while hooked descriptors keep stock identity
 static int ourIdentityStub(void *self, void *filter) {
     static bool identityLogged = false;
     if (!identityLogged) {
@@ -2016,7 +2015,6 @@ static void lgRegisterCustomAtom(uint32_t atom, void *descriptor) {
     if (inserted) g_addFilter(atom, descriptor);
 }
 
-// registering before filter table exists breaks system blur, this became a tweak btw check out https://github.com/winaviation-tweaks/Blurless
 static bool registerCustomFilter(void) {
     void **filterTableSlot = (void **)LGResolve_FilterTableSlot();
     if (!filterTableSlot) {
@@ -2031,7 +2029,7 @@ static bool registerCustomFilter(void) {
         return false;
     }
 
-    if (g_filterRegistered) return true; // idempotent
+    if (g_filterRegistered) return true;
 
     void **gaussCtxSlot = (void **)LGResolve_GaussianCtxSlot();
     if (!gaussCtxSlot) {
@@ -2272,7 +2270,6 @@ static void tweakInit(void) {
     void *internA = logResolveResult("CAInternAtomWithCString", LGResolve_CAInternAtomWithCString());
     void *addF    = logResolveResult("add_filter", LGResolve_AddFilter());
 
-    // scanned call targets need fresh pac signatures on arm64e
     g_stopEncoders = (StopEncodersFn)LGSymMakeCallable(stopEnc);
     g_internAtom   = (InternAtomFn)LGSymMakeCallable(internA);
     g_addFilter    = (AddFilterFn)LGSymMakeCallable(addF);

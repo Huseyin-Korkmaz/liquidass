@@ -1,5 +1,3 @@
-// Portion based on widget background removal logic by OwnGoal Studio (MIT License, see NOTICES.md)
-// Combined work licensed under CC BY-NC 4.0
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>

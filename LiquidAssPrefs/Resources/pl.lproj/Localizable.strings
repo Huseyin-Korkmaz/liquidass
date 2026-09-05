@@ -182,7 +182,6 @@
 "prefs.misc.export_logs.title" = "Eksportuj logi";
 "prefs.export_logs.none" = "Nie znaleziono zapisanych logów.";
 
-/* TODO: Translate synced English fallback strings. */
 "prefs.control.bezel_width" = "Bezel Width";
 "prefs.subtitle.bezel_width" = "Width of the refracting edge around the clock glyphs, in points.";
 "prefs.section.lockscreen_date_label.title" = "Date Label";

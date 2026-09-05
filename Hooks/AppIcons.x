@@ -2,6 +2,7 @@
 #import <math.h>
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
+#import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
 
 static void *kLGAppIconGlassKey = &kLGAppIconGlassKey;
@@ -44,7 +45,7 @@ static void LGInstallAppIconGlass(UIView *iconView) {
     }
 
     if (glass.superview != parent) [glass removeFromSuperview];
-    // the source icon stays visible above its glass underlay
+
     [parent insertSubview:glass belowSubview:iconView];
     glass.frame = iconView.frame;
 
@@ -54,6 +55,8 @@ static void LGInstallAppIconGlass(UIView *iconView) {
     glass.layer.masksToBounds = YES;
     lgTrackGlass(glass, @"AppIcons", nil);
 }
+
+%group LGAppIconsHooks
 
 %hook SBIconImageView
 
@@ -68,3 +71,11 @@ static void LGInstallAppIconGlass(UIView *iconView) {
 }
 
 %end
+
+%end
+
+%ctor {
+    if (LGIsSpringBoardProcess()) {
+        %init(LGAppIconsHooks);
+    }
+}
