@@ -128,12 +128,8 @@
 "prefs.control.keyboard_overhang" = "Phần mở rộng";
 "prefs.subtitle.keyboard_overhang" = "Chiều cao bổ sung phía trên bàn phím khi thanh dự đoán bị ẩn.";
 
-"prefs.control.bezel_ratio" = "Bezel Ratio";
-"prefs.control.exposure_boost" = "Tăng sáng (Exposure)";
-"prefs.subtitle.exposure_boost" = "Điều chỉnh độ sáng và độ phơi sáng của glass.";
 "prefs.control.light_tint_color" = "Light Tint";
 "prefs.control.dark_tint_color" = "Dark Tint";
-"prefs.subtitle.bezel_ratio" = "Width of the refracting edge relative to the glass view's short side.";
 "prefs.subtitle.light_tint_color" = "Color and opacity used while the device is in Light Mode.";
 "prefs.subtitle.dark_tint_color" = "Color and opacity used while the device is in Dark Mode.";
 "prefs.section.alerts.title" = "Alerts";
@@ -196,3 +192,16 @@
 "prefs.subtitle.date_format_enabled" = "Replace the lockscreen date with a custom date format.";
 "prefs.control.date_format" = "Format";
 "prefs.subtitle.date_format" = "Uses Unicode date pattern syntax, for example EEE MMM d.";
+
+"prefs.notification.label_color.title" = "Label Color";
+"prefs.notification.label_color.subtitle" = "Choose white or black notification text.";
+"prefs.color.white" = "White";
+"prefs.color.black" = "Black";
+"prefs.surface.assistive_touch.title" = "AssistiveTouch";
+"prefs.surface.assistive_touch.subtitle" = "Customize AssistiveTouch liquid glass button";
+"prefs.surface.volume_hud.title" = "Volume HUD";
+"prefs.surface.volume_hud.subtitle" = "Sidebar elastic volume slider";
+"prefs.surface.pill_hud.title" = "Pill HUDs";
+"prefs.surface.pill_hud.subtitle" = "Mute, ringer, and DND alert pills";
+"prefs.control.keyboard_custom_font" = "Custom Font";
+"prefs.subtitle.keyboard_custom_font" = "Use the bundled SF Compact font for keyboard keys.";

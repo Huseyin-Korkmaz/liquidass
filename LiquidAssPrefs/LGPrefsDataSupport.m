@@ -414,14 +414,6 @@ static NSDictionary *LGGlassSpecularSetting(NSString *key, CGFloat fallback, CGF
 static const CGFloat kLGUniversalQualityMax = 1.0f;
 static const CGFloat kLGCoverSheetCornerRadiusPoints = 64.0f;
 
-static CGFloat LGDefaultBezelRatioForHost(NSString *prefix, const LGHostDefinition *host) {
-    if (!host || ![prefix isEqualToString:@"CoverSheet"]) return host ? host->bezelRatio : 0.0;
-    CGFloat screenWidth = UIScreen.mainScreen.bounds.size.width;
-    CGFloat cornerRadius = LGReadPreference(@"CoverSheet.CornerRadius",
-                                            @(kLGCoverSheetCornerRadiusPoints)).doubleValue;
-    return screenWidth > 0.0 ? cornerRadius / screenWidth : host->bezelRatio;
-}
-
 NSArray<NSDictionary *> *LGRendererItemsForHostPrefix(NSString *prefix) {
     const LGHostDefinition *host = LGHostDefinitionForPreferencePrefix(prefix.UTF8String);
     if (!host) return @[];
@@ -432,17 +424,13 @@ NSArray<NSDictionary *> *LGRendererItemsForHostPrefix(NSString *prefix) {
     NSString *darkTint = [NSString stringWithUTF8String:host->darkTintHex];
     CGFloat dispersionMax = LGHostIdentifierForDefinition(host) == LGHostIdentifierCoverSheet
         ? kLGUniversalDispersionMax : 2.0f;
-    CGFloat bezelRatioDefault = LGDefaultBezelRatioForHost(prefix, host);
+    CGFloat bezelWidthDefault = host->bezelWidthPoints;
     BOOL enabledByDefault = ![prefix isEqualToString:@"AppIcons"];
     NSMutableArray<NSDictionary *> *items = [NSMutableArray arrayWithArray:@[
         LGGlassEnabledSetting(key(@"Enabled"), enabledByDefault),
-        [prefix isEqualToString:@"Clock"]
-            ? LGSliderSetting(key(@"BezelWidth"), LGLocalized(@"prefs.control.bezel_width"),
-                              LGLocalized(@"prefs.subtitle.bezel_width"),
-                              12.0, 1.0, 40.0, 1)
-            : LGSliderSetting(key(@"BezelRatio"), LGLocalized(@"prefs.control.bezel_ratio"),
-                              LGLocalized(@"prefs.subtitle.bezel_ratio"),
-                              bezelRatioDefault, 0.0, 1.0, 3),
+        LGSliderSetting(key(@"BezelWidth"), LGLocalized(@"prefs.control.bezel_width"),
+                        LGLocalized(@"prefs.subtitle.bezel_width"),
+                        bezelWidthDefault, 0.0, 80.0, 1),
         LGGlassThicknessSetting(key(@"GlassThickness"), host->glassThickness, 0.0, 220.0, 1),
         LGGlassRefractionSetting(key(@"RefractionScale"), host->refractionScale, 0.0, 5.0, 2),
         LGGlassRefractiveIndexSetting(key(@"RefractiveIndex"), host->refractiveIndex, 1.0, 3.0, 2),

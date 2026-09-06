@@ -17,7 +17,7 @@ liquidass_FILES     = Tweak.x \
                       $(wildcard Hooks/*.x) \
                       $(wildcard LiquidAssPrefs/LGPrefsLiquid*.m) \
                       $(wildcard Shared/*.[xm]) \
-                      $(wildcard LGFramework/*.m)
+                      Shared/LGFramework.m
 liquidass_CFLAGS    = -fobjc-arc
 liquidass_USE_MODULES = 0
 liquidass_FRAMEWORKS = UIKit QuartzCore CoreText CoreGraphics CoreMotion

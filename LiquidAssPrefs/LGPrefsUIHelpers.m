@@ -2,7 +2,7 @@
 #import "LGPrefsDataSupport.h"
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGSharedSupport.h"
-#import "../LGFramework/LGButtonView.h"
+#import "../Shared/LGFramework.h"
 #import <notify.h>
 #import <objc/message.h>
 #import <objc/runtime.h>

@@ -86,16 +86,27 @@ static BOOL LGVolumeHUDEnabled(void) {
     return lgHostEnabled(@"VolumeHUD");
 }
 
+static UIView *LGVolumeHUDSliderBackground(UIView *slider) {
+    Class materialClass = NSClassFromString(@"MTMaterialView");
+    for (UIView *subview in slider.subviews)
+        if ([subview isKindOfClass:materialClass]) return subview;
+    return nil;
+}
+
 static void LGUpdateVolumeHUDGlass(SBElasticSliderMaterialWrapperView *self) {
     if (!self) return;
 
     MTMaterialView *base = nil;
     MTMaterialView *cap = nil;
+    UIView *shadow = nil;
     UIView *sliderWrapper = nil;
+    UIView *sliderView = nil;
     @try {
         base = [self valueForKey:@"_baseMaterialView"];
         cap = [self valueForKey:@"_captureOnlyMaterialView"];
+        shadow = [self valueForKey:@"_shadowView"];
         sliderWrapper = [self valueForKey:@"_sliderWrapperView"];
+        sliderView = [self valueForKey:@"_sliderView"];
     } @catch (...) {}
 
     if (!LGVolumeHUDEnabled()) {
@@ -105,11 +116,14 @@ static void LGUpdateVolumeHUDGlass(SBElasticSliderMaterialWrapperView *self) {
         if (existingVib) existingVib.hidden = YES;
         if (base) base.hidden = NO;
         if (cap) cap.hidden = NO;
+        if (shadow) shadow.hidden = NO;
+        LGVolumeHUDSliderBackground(sliderView).hidden = NO;
         return;
     }
 
     if (base) base.hidden = YES;
     if (cap) cap.hidden = YES;
+    if (shadow) shadow.hidden = YES;
 
     LGVolumeHUDVibranceView *vibrance = objc_getAssociatedObject(self, kLGVolumeHUDVibranceKey);
     if (!vibrance) {
@@ -174,9 +188,8 @@ static void LGUpdateVolumeHUDGlass(SBElasticSliderMaterialWrapperView *self) {
         sliderWrapper.layer.masksToBounds = YES;
     }
 
-    UIView *sliderView = nil;
-    @try { sliderView = [self valueForKey:@"_sliderView"]; } @catch (...) {}
     if (sliderView) {
+        LGVolumeHUDSliderBackground(sliderView).hidden = YES;
         sliderView.layer.cornerRadius = radius;
         if (@available(iOS 13.0, *)) {
             sliderView.layer.cornerCurve = kCACornerCurveContinuous;

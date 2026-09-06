@@ -1,7 +1,6 @@
 
 "prefs.app_name" = "Liquid (Gl)ass";
 "prefs.control.enabled" = "Enabled";
-"prefs.control.bezel_ratio" = "Bezel Ratio";
 "prefs.control.blur" = "Blur";
 "prefs.control.corner_radius" = "Corner Radius";
 "prefs.control.glass_thickness" = "Glass Thickness";
@@ -22,7 +21,6 @@
 "prefs.control.motion_highlights" = "Motion Highlights";
 "prefs.control.motion_highlights_sensitivity" = "Motion Sensitivity";
 "prefs.subtitle.enabled" = "Turn this glass view on or off.";
-"prefs.subtitle.bezel_ratio" = "Width of the refracting edge relative to the glass view's short side.";
 "prefs.subtitle.blur" = "Softness of the glass view.";
 "prefs.subtitle.corner_radius" = "Roundness of the glass view.";
 "prefs.subtitle.glass_thickness" = "Depth of the glass volume, visually it does not change anything much.";
@@ -183,3 +181,16 @@
 "prefs.subtitle.date_format_enabled" = "Replace the lockscreen date with a custom date format.";
 "prefs.control.date_format" = "Format";
 "prefs.subtitle.date_format" = "Uses Unicode date pattern syntax, for example EEE MMM d.";
+
+"prefs.notification.label_color.title" = "Label Color";
+"prefs.notification.label_color.subtitle" = "Choose white or black notification text.";
+"prefs.color.white" = "White";
+"prefs.color.black" = "Black";
+"prefs.surface.assistive_touch.title" = "AssistiveTouch";
+"prefs.surface.assistive_touch.subtitle" = "Customize AssistiveTouch liquid glass button";
+"prefs.surface.volume_hud.title" = "Volume HUD";
+"prefs.surface.volume_hud.subtitle" = "Sidebar elastic volume slider";
+"prefs.surface.pill_hud.title" = "Pill HUDs";
+"prefs.surface.pill_hud.subtitle" = "Mute, ringer, and DND alert pills";
+"prefs.control.keyboard_custom_font" = "Custom Font";
+"prefs.subtitle.keyboard_custom_font" = "Use the bundled SF Compact font for keyboard keys.";

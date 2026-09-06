@@ -4,8 +4,7 @@
 #import <objc/message.h>
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGSharedSupport.h"
-
-#import "../LGFramework/LGAdjustableBlurView.h"
+#import "../Shared/LGFramework.h"
 
 static UIImage *CreateExposureGlowImage(CGFloat diameter) {
     CGSize size = CGSizeMake(diameter, diameter);
@@ -1153,8 +1152,6 @@ static void LGAssistiveTouchRestartRequested(CFNotificationCenterRef center, voi
 }
 
 %ctor {
-    if (![NSProcessInfo.processInfo.processName isEqualToString:@"assistivetouchd"]) return;
-
     id enabledVal = LGGlassPreferenceValue(@"AssistiveTouch.Enabled");
     if (enabledVal && ![enabledVal boolValue]) return;
 

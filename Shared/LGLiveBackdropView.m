@@ -345,7 +345,11 @@ static const CGFloat kLGGlassEdgeWidth = 1.0;
 @implementation LGLiveBackdropView {
     NSString        *_lgGroupName;
     CAGradientLayer *_specularLayer;
+    CAGradientLayer *_specularBoostLayer;
+    CAGradientLayer *_specularDarkLayer;
     CAShapeLayer    *_specularMask;
+    CAShapeLayer    *_specularBoostMask;
+    CAShapeLayer    *_specularDarkMask;
     CAShapeLayer    *_edge;
     BOOL             _backdropConfigured;
     BOOL             _filterAttached;
@@ -510,17 +514,34 @@ static const CGFloat kLGGlassEdgeWidth = 1.0;
     }
     maxAlpha = fmax(0.0, fmin(1.0, maxAlpha));
 
-    id colTop1 = (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha].CGColor;
-    id colTop2 = (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.35].CGColor;
-    id clear   = (id)UIColor.clearColor.CGColor;
-    id colBot1 = (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.12].CGColor;
-    id colBot2 = (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.25].CGColor;
-    NSArray *specularColors = @[colTop1, colTop2, clear, clear, colBot1, colBot2];
+    id clear = (id)UIColor.clearColor.CGColor;
+    NSArray *specularColors = @[
+        (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.18].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.063].CGColor,
+        clear, clear,
+        (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.027].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.0756].CGColor
+    ];
+    NSArray *boostColors = @[
+        (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.72].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.2016].CGColor,
+        clear, clear,
+        (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.072].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:maxAlpha * 0.3024].CGColor
+    ];
+    NSArray *darkColors = @[
+        (id)[UIColor colorWithWhite:0.0 alpha:maxAlpha * 0.16].CGColor,
+        (id)[UIColor colorWithWhite:0.0 alpha:maxAlpha * 0.056].CGColor,
+        clear, clear,
+        (id)[UIColor colorWithWhite:0.0 alpha:maxAlpha * 0.024].CGColor,
+        (id)[UIColor colorWithWhite:0.0 alpha:maxAlpha * 0.0672].CGColor
+    ];
 
     if (!_specularLayer) {
         _specularLayer = [CAGradientLayer layer];
         _specularLayer.colors = specularColors;
         _specularLayer.locations = @[@0.0, @0.12, @0.34, @0.66, @0.88, @1.0];
+        _specularLayer.compositingFilter = @"screenBlendMode";
 
         _specularMask = [CAShapeLayer layer];
         _specularMask.backgroundColor = UIColor.clearColor.CGColor;
@@ -528,14 +549,41 @@ static const CGFloat kLGGlassEdgeWidth = 1.0;
         _specularMask.borderWidth = 1.0;
         _specularLayer.mask = _specularMask;
         [self.layer addSublayer:_specularLayer];
+
+        _specularBoostLayer = [CAGradientLayer layer];
+        _specularBoostLayer.colors = boostColors;
+        _specularBoostLayer.locations = _specularLayer.locations;
+        _specularBoostLayer.compositingFilter = @"overlayBlendMode";
+        _specularBoostMask = [CAShapeLayer layer];
+        _specularBoostMask.backgroundColor = UIColor.clearColor.CGColor;
+        _specularBoostMask.borderColor = UIColor.blackColor.CGColor;
+        _specularBoostMask.borderWidth = 1.0;
+        _specularBoostLayer.mask = _specularBoostMask;
+        [self.layer addSublayer:_specularBoostLayer];
+
+        _specularDarkLayer = [CAGradientLayer layer];
+        _specularDarkLayer.colors = darkColors;
+        _specularDarkLayer.locations = _specularLayer.locations;
+        _specularDarkLayer.compositingFilter = @"multiplyBlendMode";
+        _specularDarkMask = [CAShapeLayer layer];
+        _specularDarkMask.backgroundColor = UIColor.clearColor.CGColor;
+        _specularDarkMask.borderColor = UIColor.blackColor.CGColor;
+        _specularDarkMask.borderWidth = 1.0;
+        _specularDarkLayer.mask = _specularDarkMask;
+        [self.layer addSublayer:_specularDarkLayer];
     } else {
         _specularLayer.colors = specularColors;
+        _specularBoostLayer.colors = boostColors;
+        _specularDarkLayer.colors = darkColors;
     }
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    _specularLayer.hidden = !enabled;
-    _specularLayer.frame = shapeRect;
+    for (CAGradientLayer *layer in @[_specularLayer, _specularBoostLayer,
+                                      _specularDarkLayer]) {
+        layer.hidden = !enabled;
+        layer.frame = shapeRect;
+    }
 
     UIColor *edgeColor = [UIColor.separatorColor colorWithAlphaComponent:0.16];
     if (@available(iOS 13.0, *))
@@ -547,12 +595,13 @@ static const CGFloat kLGGlassEdgeWidth = 1.0;
     _edge.borderWidth = kLGGlassEdgeWidth;
     _edge.borderColor = edgeColor.CGColor;
 
-    if (_specularMask) {
-        _specularMask.frame = CGRectMake(0.0, 0.0, CGRectGetWidth(shapeRect),
-                                         CGRectGetHeight(shapeRect));
-        _specularMask.cornerRadius = shapeRadius;
-        _specularMask.cornerCurve = self.layer.cornerCurve;
-        _specularMask.borderWidth = 1.0;
+    for (CAShapeLayer *mask in @[_specularMask, _specularBoostMask,
+                                  _specularDarkMask]) {
+        mask.frame = CGRectMake(0.0, 0.0, CGRectGetWidth(shapeRect),
+                                CGRectGetHeight(shapeRect));
+        mask.cornerRadius = shapeRadius;
+        mask.cornerCurve = self.layer.cornerCurve;
+        mask.borderWidth = 1.0;
     }
     [CATransaction commit];
     [self applySpecularAngle:sLGSpecularAngle];
@@ -564,12 +613,18 @@ static const CGFloat kLGGlassEdgeWidth = 1.0;
     CGFloat dy = sin(angle) * 0.5;
     _specularLayer.startPoint = CGPointMake(0.5 + dx, 0.5 + dy);
     _specularLayer.endPoint = CGPointMake(0.5 - dx, 0.5 - dy);
+    _specularBoostLayer.startPoint = _specularLayer.startPoint;
+    _specularBoostLayer.endPoint = _specularLayer.endPoint;
+    _specularDarkLayer.startPoint = _specularLayer.startPoint;
+    _specularDarkLayer.endPoint = _specularLayer.endPoint;
 }
 
 - (void)applyFilters {
     CALayer *layer = self.layer;
     Class backdropCls = NSClassFromString(@"CABackdropLayer");
     if (!backdropCls || ![layer isKindOfClass:backdropCls]) return;
+    enum LGHostIdentifier hostIdentifier =
+        LGHostIdentifierForFilterType(_lgFilterType.UTF8String);
 
     @try {
 
@@ -585,12 +640,11 @@ static const CGFloat kLGGlassEdgeWidth = 1.0;
         }
 
         CGFloat wantScale;
-        enum LGHostIdentifier hostIdentifier =
-            LGHostIdentifierForFilterType(_lgFilterType.UTF8String);
         if (hostIdentifier == LGHostIdentifierClock) {
             wantScale = kLGClockCaptureScale;
         } else if (hostIdentifier == LGHostIdentifierCoverSheet ||
-                   hostIdentifier == LGHostIdentifierTabBar) {
+                   hostIdentifier == LGHostIdentifierTabBar ||
+                   hostIdentifier == LGHostIdentifierTabBarSelection) {
             wantScale = 1.0;
         } else {
             wantScale = LGUsesPrefsControlCaptureScale(_lgFilterType)

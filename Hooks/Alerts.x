@@ -1,4 +1,3 @@
-#import "../Shared/LGSharedSupport.h"
 #import "../Shared/LGGlassKit.h"
 #import "../Shared/LGLiveBackdropView.h"
 #import <objc/runtime.h>
@@ -950,6 +949,5 @@ static void LGAlertProbeHierarchy(UIAlertController *controller, NSString *reaso
 %end
 
 %ctor {
-    if (!LGIsSpringBoardProcess() && !LGIsPreferencesProcess()) return;
     %init(LGAlertsSpringBoard);
 }

@@ -5,6 +5,7 @@
 #import "../Shared/LGLensRectState.h"
 #import "LGSymbolResolver.h"
 #import "../Shared/LGCoverSheetState.h"
+#import "../Shared/LGKeyboardState.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <time.h>
@@ -286,6 +287,7 @@ typedef struct {
     float       useGlyphMask;
     float       dispersionStrength;
     float       fresnelGlareStrength;
+    float       borderWidthPixels;
     simd_float4 tintColor;
 } LGUniforms;
 
@@ -443,6 +445,7 @@ struct Uniforms {
     float  useGlyphMask;
     float  dispersionStrength;
     float  fresnelGlareStrength;
+    float  borderWidthPixels;
     float4 tintColor;
 };
 
@@ -609,16 +612,18 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
     float2 px = capturePx;
     float fw = u.resolution.x, fh = u.resolution.y;
     float coverOrientation = isCoverSheet ? -u.useGlyphMask : 0.0;
-    if (isCoverSheet && coverOrientation == 2.0) {
+    float keyboardOrientation = isKeyboard ? round(u.useGlyphMask * 10.0) : 0.0;
+    float renderOrientation = isCoverSheet ? coverOrientation : keyboardOrientation;
+    if ((isCoverSheet || isKeyboard) && renderOrientation == 2.0) {
 
         px = float2(u.resolution.x - capturePx.x,
                     u.resolution.y - capturePx.y);
-    } else if (isCoverSheet && coverOrientation == 3.0) {
+    } else if ((isCoverSheet || isKeyboard) && renderOrientation == 3.0) {
 
         px = float2(capturePx.y, u.resolution.x - capturePx.x);
         fw = u.resolution.y;
         fh = u.resolution.x;
-    } else if (isCoverSheet && coverOrientation == 4.0) {
+    } else if ((isCoverSheet || isKeyboard) && renderOrientation == 4.0) {
 
         px = float2(u.resolution.y - capturePx.y, capturePx.x);
         fw = u.resolution.y;
@@ -735,8 +740,7 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
             cornerBlend = saturate(min(q.x, q.y) /
                                    max(min(extent.x, extent.y), 0.001));
         }
-        float kEdgeAA = 1.75;
-        if (signedDistance > (subShape ? kEdgeAA : 1.0)) {
+        if (signedDistance > (subShape ? 0.0 : 1.0)) {
             return subShape ? float4(0.0) : src.sample(s, captureUV);
         }
 
@@ -773,8 +777,7 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
                          (dT < dB && dT == dm) ? -1.0 : (dB <= dT && dB == dm) ?  1.0 : 0.0);
         }
         if (subShape) {
-            edgeOpacity = saturate((kEdgeAA - signedDistance) / (kEdgeAA + 0.75));
-            edgeOpacity = edgeOpacity * edgeOpacity * (3.0 - 2.0 * edgeOpacity);
+            edgeOpacity = 1.0;
         } else {
             edgeOpacity = clamp(1.0 - max(0.0, signedDistance), 0.0, 1.0);
         }
@@ -801,25 +804,26 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
         (isKeyboard && dir.y >= abs(dir.x))) normDisp = 0.0;
 
     float2 textureDir = dir;
-    if (isCoverSheet && coverOrientation == 2.0) {
+    if ((isCoverSheet || isKeyboard) && renderOrientation == 2.0) {
 
         textureDir = -dir;
-    } else if (isCoverSheet && coverOrientation == 3.0) {
+    } else if ((isCoverSheet || isKeyboard) && renderOrientation == 3.0) {
 
         textureDir = float2(-dir.y, dir.x);
-    } else if (isCoverSheet && coverOrientation == 4.0) {
+    } else if ((isCoverSheet || isKeyboard) && renderOrientation == 4.0) {
 
         textureDir = float2(dir.y, -dir.x);
     }
     float2 dispPx = -textureDir * normDisp * bezel
                   * u.refractionScale * edgeOpacity;
+    float2 sampleLogicalPx = isKeyboard ? capturePx : px;
 
     float dispersion = clamp(u.dispersionStrength, 0.0, 20.0);
     constexpr float zoomRampSpan = 0.3;
     float zoomMix = bezel > 0.001
         ? clamp((1.0 - distFromSide / bezel) / zoomRampSpan, 0.0, 1.0) : 0.0;
     zoomMix = zoomMix * zoomMix * (3.0 - 2.0 * zoomMix);
-    float2 greenUV = backdropSampleUV(capturePx, px, dispPx,
+    float2 greenUV = backdropSampleUV(capturePx, sampleLogicalPx, dispPx,
                                       isCoverSheet, u, zoomMix);
     float4 greenSample = src.sample(s, greenUV);
 
@@ -840,7 +844,7 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
 
         for (int i = 0; i < 3; i++) {
             float weight = 1.0 - float(i) / 3.0;
-            float2 uv = backdropSampleUV(capturePx, px,
+            float2 uv = backdropSampleUV(capturePx, sampleLogicalPx,
                                           dispPx + aberrationPx * weight,
                                           isCoverSheet, u, zoomMix);
             float4 sample = src.sample(s, uv);
@@ -858,7 +862,7 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
 
         for (int i = 0; i < 4; i++) {
             float weight = float(i) / 3.0;
-            float2 uv = backdropSampleUV(capturePx, px,
+            float2 uv = backdropSampleUV(capturePx, sampleLogicalPx,
                                           dispPx - aberrationPx * weight,
                                           isCoverSheet, u, zoomMix);
             float4 sample = src.sample(s, uv);
@@ -887,7 +891,9 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
     highlight *= mix(0.32, 1.0, luminance);
     highlight = min(highlight, 0.22);
     outRGB = 1.0 - (1.0 - outRGB) * (1.0 - highlight);
-    return float4(outRGB * edgeOpacity, edgeOpacity);
+    if (subShape && distFromSide <= u.borderWidthPixels)
+        outRGB = 1.0 - (1.0 - outRGB) * 0.82;
+    return float4(outRGB, edgeOpacity);
 }
 
 struct LGVertexOut {
@@ -1188,8 +1194,6 @@ lgClockMaskTexture(__unsafe_unretained id<MTLDevice> device) {
 }
 
 static const float kCornerRadiusRatio = 28.0f / 220.0f;
-static const float kBezelWidthRatio   = kCornerRadiusRatio * 1.8f;
-
 static const float kMaxBezelPx        = 34.0f;
 
 static void ensureUniforms(__unsafe_unretained id<MTLDevice> device, uint64_t w, uint64_t h) {
@@ -1218,6 +1222,7 @@ static void ensureUniforms(__unsafe_unretained id<MTLDevice> device, uint64_t w,
     u->useGlyphMask            = 0.f;
     u->dispersionStrength      = 5.0f;
     u->fresnelGlareStrength    = 0.5f;
+    u->borderWidthPixels       = 2.0f;
     lglog("uniforms buffer allocated (geometry refreshed per-frame)");
 }
 
@@ -1233,7 +1238,7 @@ static void updateUniformsForFrame(uint64_t w, uint64_t h) {
     u->wallpaperResolution = simd_make_float2(fw, fh);
     u->lensOrigin          = simd_make_float2(0.f, 0.f);
     u->radius              = kCornerRadiusRatio * shortest;
-    u->bezelWidth           = fminf(kBezelWidthRatio * shortest, kMaxBezelPx);
+    u->bezelWidth           = kMaxBezelPx;
 }
 
 typedef struct {
@@ -1241,7 +1246,7 @@ typedef struct {
     const char *prefPrefix;
     uint32_t    atom;
     float       radiusRatio;
-    float       bezelRatio;
+    float       bezelWidthPoints;
     float       glassThickness;
     float       refractionScale;
     float       refractiveIndex;
@@ -1263,7 +1268,6 @@ static LGHostParams g_hostParams[kHostCount];
 static uint32_t g_darkAtoms[kHostCount];
 static bool         g_hostParamsInit = false;
 static float        g_fresnelGlareStrength = 0.5f;
-static bool         g_coverSheetBezelRatioOverride = false;
 static float        g_coverSheetCornerRadiusPoints = 64.0f;
 
 struct LGRadiusRoute { int host; float radiusRatio; bool dark; };
@@ -1347,7 +1351,6 @@ static void lgReloadHostPrefs(void) {
     NSNumber *fresnelStrength = prefs[@"Renderer.FresnelGlareStrength"];
     g_fresnelGlareStrength = [fresnelStrength isKindOfClass:NSNumber.class]
         ? fminf(1.0f, fmaxf(0.0f, fresnelStrength.floatValue)) : 0.5f;
-    g_coverSheetBezelRatioOverride = false;
     g_coverSheetCornerRadiusPoints = 64.0f;
     NSNumber *coverSheetCornerRadius = prefs[@"CoverSheet.CornerRadius"];
     if ([coverSheetCornerRadius isKindOfClass:[NSNumber class]]) {
@@ -1364,15 +1367,11 @@ static void lgReloadHostPrefs(void) {
         if (!prefs) continue;
         NSString *p = [NSString stringWithUTF8String:kHostDefaults[i].prefPrefix];
         NSNumber *v;
-        if (i == LGHostIdentifierCoverSheet) {
-            id storedBezelRatio = prefs[[p stringByAppendingString:@".BezelRatio"]];
-            g_coverSheetBezelRatioOverride = [storedBezelRatio isKindOfClass:[NSNumber class]];
-        }
         #define LG_OVR(field, key) \
             if ((v = prefs[[p stringByAppendingString:@"." key]]) && \
                 [v isKindOfClass:[NSNumber class]]) { g_hostParams[i].field = v.floatValue; overrides++; }
 
-        LG_OVR(bezelRatio,      @"BezelRatio");
+        LG_OVR(bezelWidthPoints,  @"BezelWidth");
         LG_OVR(glassThickness,     @"GlassThickness");
         LG_OVR(refractionScale,    @"RefractionScale");
         LG_OVR(refractiveIndex,    @"RefractiveIndex");
@@ -1409,7 +1408,7 @@ static void lgReloadHostPrefs(void) {
 
     lglog("lgReloadHostPrefs: %s (%d hosts, %d overrides) banner.bezel=%.3f refr=%.2f",
           prefs ? "loaded prefs" : "defaults", kHostCount, overrides,
-          g_hostParams[4].bezelRatio, g_hostParams[4].refractionScale);
+          g_hostParams[4].bezelWidthPoints, g_hostParams[4].refractionScale);
 }
 
 static void lgPrefsReloadCallback(CFNotificationCenterRef c, void *o, CFStringRef n,
@@ -1489,9 +1488,10 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
     float radiusRatio = radiusIt != g_radiusRoutes.end()
         ? radiusIt->second.radiusRatio : hp->radiusRatio;
     lu.radius          = radiusRatio * shortestF;
-    float maxBezel = !strcmp(hp->prefPrefix, "CoverSheet")
-        ? shortestF * 0.5f : kMaxBezelPx;
-    lu.bezelWidth      = fminf(hp->bezelRatio * shortestF, maxBezel);
+    float pixelsPerPoint = fmaxf(0.1f, scale * 2.0f);
+    lu.borderWidthPixels = pixelsPerPoint;
+    lu.bezelWidth      = fminf(hp->bezelWidthPoints * pixelsPerPoint,
+                               shortestF * 0.5f);
     lu.glassThickness     = hp->glassThickness;
     lu.refractionScale    = hp->refractionScale;
     lu.refractiveIndex    = hp->refractiveIndex;
@@ -1508,11 +1508,11 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
             bool routedRadius = radiusIt != g_radiusRoutes.end();
             lglog("keyboard-geometry[%d] atom=0x%x tex=%llux%llu dark=%d "
                   "route=%d routeHost=%d hostRatio=%.6f selectedRatio=%.6f "
-                  "radius=%.3f bezelRatio=%.6f bezel=%.3f",
+                  "radius=%.3f bezelWidth=%.3f bezel=%.3f",
                   logIndex, ftype, w, h, darkTint, routedRadius,
                   routedRadius ? radiusIt->second.host : -1,
                   hp->radiusRatio, radiusRatio, lu.radius,
-                  hp->bezelRatio, lu.bezelWidth);
+                  hp->bezelWidthPoints, lu.bezelWidth);
         }
     }
 
@@ -1529,7 +1529,8 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
                                                lens.heightRatio * (float)h);
             float shapeShortest = fminf(lu.shapeSize.x, lu.shapeSize.y);
             lu.radius = radiusRatio * shapeShortest;
-            lu.bezelWidth = fminf(hp->bezelRatio * shapeShortest, kMaxBezelPx);
+            lu.bezelWidth = fminf(hp->bezelWidthPoints * pixelsPerPoint,
+                                  shapeShortest * 0.5f);
         }
     }
 
@@ -1544,12 +1545,14 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
                                               lens.heightRatio * (float)h);
             float shapeShortest = fminf(lu.shapeSize.x, lu.shapeSize.y);
             lu.radius = radiusRatio * shapeShortest;
-            lu.bezelWidth = fminf(hp->bezelRatio * shapeShortest, kMaxBezelPx);
+            lu.bezelWidth = fminf(hp->bezelWidthPoints * pixelsPerPoint,
+                                  shapeShortest * 0.5f);
         } else {
             lu.shapeScale = 0.75f;
             float shapeShortest = shortestF * lu.shapeScale;
             lu.radius = radiusRatio * shapeShortest;
-            lu.bezelWidth = fminf(hp->bezelRatio * shapeShortest, kMaxBezelPx);
+            lu.bezelWidth = fminf(hp->bezelWidthPoints * pixelsPerPoint,
+                                  shapeShortest * 0.5f);
         }
 
     }
@@ -1567,7 +1570,27 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
             lu.bezelWidth = fmaxf(1.0f, g_clockMaskBezelWidthPoints * pixelsPerPoint);
         }
     } else if (!strcmp(hp->prefPrefix, "Keyboard")) {
-        lu.useGlyphMask = 0.25f;
+        LGKeyboardSharedState state = {};
+        bool stateValid = LGKeyboardReadSharedState(&state) && state.active;
+        uint32_t orientation = stateValid
+            ? state.deviceOrientation : 1u;
+        lu.useGlyphMask = 0.1f * (float)orientation;
+        static uint32_t lastKeyboardOrientation = UINT32_MAX;
+        static int keyboardOrientationLogs;
+        if (orientation != lastKeyboardOrientation || keyboardOrientationLogs < 16) {
+            lastKeyboardOrientation = orientation;
+            keyboardOrientationLogs++;
+            const char *rotation = orientation == 1 ? "identity"
+                : orientation == 2 ? "flip-180"
+                : orientation == 3 ? "rotate-left"
+                : orientation == 4 ? "rotate-right" : "unknown";
+            lglog("keyboard-shader-state valid=%d magic=0x%x seq=%u active=%u "
+                  "orientation=%u rotation=%s tex=%llux%llu shape={%.1f,%.1f} "
+                  "radius=%.1f bezel=%.1f refraction=%.2f",
+                  stateValid, state.magic, state.sequence, state.active,
+                  orientation, rotation, w, h, lu.shapeSize.x, lu.shapeSize.y,
+                  lu.radius, lu.bezelWidth, lu.refractionScale);
+        }
     } else if (!strcmp(hp->prefPrefix, "CoverSheet")) {
 
         lu.useGlyphMask = -1.f;
@@ -1600,19 +1623,10 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
                 lu.radius = coverSheetCornerRadiusPoints * pixelsPerPoint;
             }
         }
-        if (!g_coverSheetBezelRatioOverride && coverStateValid &&
-            state.pixelsPerPoint >= 1.0f && state.pixelsPerPoint <= 4.0f && w > 0) {
-            float screenWidthPoints = (float)w / state.pixelsPerPoint;
-            float cornerRadiusPoints = lu.radius / state.pixelsPerPoint;
-            float dynamicBezelRatio = screenWidthPoints > 0.0f
-                ? cornerRadiusPoints / screenWidthPoints : 0.0f;
-            lu.bezelWidth = fminf(dynamicBezelRatio * (float)w, maxBezel);
-            static int sCoverBezelLogs = 0;
-            if (__sync_fetch_and_add(&sCoverBezelLogs, 1) < 12) {
-                lglog("coversheet-bezel default radius=%.2fpt screenWidth=%.2fpt ratio=%.5f px=%.2f",
-                      cornerRadiusPoints, screenWidthPoints, dynamicBezelRatio,
-                      lu.bezelWidth);
-            }
+        if (coverStateValid && state.pixelsPerPoint >= 1.0f &&
+            state.pixelsPerPoint <= 4.0f) {
+            lu.bezelWidth = fminf(hp->bezelWidthPoints * state.pixelsPerPoint,
+                                  shortestF * 0.5f);
         }
         static uint32_t sLastCoverOrientation = UINT32_MAX;
         static int sInitialCoverStateLogs = 0;

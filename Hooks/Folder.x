@@ -2,14 +2,10 @@
 #import <math.h>
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
-#import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
 
-@interface SBFolderIconImageView : UIView
-@end
-
-@interface SBIconBadgeView : UIView
-@end
+extern BOOL LGDebugLoggingEnabled(void);
+#define LGFolderLog(...) do { if (LGDebugLoggingEnabled()) LGLog(__VA_ARGS__); } while (0)
 
 static BOOL isFolderIconMaterial(UIView *mat) {
     static Class folderCls, iconCls;
@@ -28,61 +24,28 @@ static BOOL isOpenFolderMaterial(UIView *mat) {
     return CGRectGetWidth(b) >= 200.0 && CGRectGetHeight(b) >= 200.0;
 }
 
+#pragma mark - folder-open coordination
+
 static NSHashTable<UIView *> *sFolderIconGlasses;
 static NSHashTable<UIView *> *sFolderIconMaterials;
 static NSHashTable<UIView *> *sOpenFolderMaterials;
-static BOOL sOpenFolderIsOpen;
+static __weak UIView *sActiveFolderIconGlass;
+static CGPoint sActiveFolderIconCenter;
+static BOOL sActiveFolderIconCenterKnown;
 
-static BOOL anyOpenFolderActive(void) {
-    for (UIView *m in sOpenFolderMaterials.allObjects) {
-        if (m.window) return YES;
-    }
-    return NO;
-}
-
-static UIView *glassForBackgroundView(UIView *bg) {
-    if (!bg) return nil;
-    UIView *g = objc_getAssociatedObject(bg, kGlassKey);
-    if (g) return g;
-    for (UIView *sub in bg.subviews) {
-        g = objc_getAssociatedObject(sub, kGlassKey);
-        if (g) return g;
+static UIView *folderIconGlass(UIView *view) {
+    if (!view) return nil;
+    UIView *glass = objc_getAssociatedObject(view, kGlassKey);
+    if (glass) return glass;
+    for (UIView *subview in view.subviews) {
+        glass = folderIconGlass(subview);
+        if (glass) return glass;
     }
     return nil;
 }
 
-static void hideRemainingFolderIconGlasses(UIView *activeFolderIconImageView) {
-    sOpenFolderIsOpen = YES;
-    UIView *activeBg = nil;
-    if (activeFolderIconImageView) {
-        @try { activeBg = [activeFolderIconImageView valueForKey:@"_backgroundView"]; } @catch (...) {}
-    }
-    UIView *activeGlass = glassForBackgroundView(activeBg);
-
-    for (UIView *g in sFolderIconGlasses.allObjects) {
-        if (g == activeGlass) continue;
-        g.hidden = YES;
-        g.alpha = 0.0;
-    }
-}
-
-static void showAllFolderIconGlasses(void) {
-    sOpenFolderIsOpen = NO;
-    for (UIView *g in sFolderIconGlasses.allObjects) {
-        UIView *parent = g.superview;
-        id crossfadeView = nil;
-        if (parent) {
-            @try { crossfadeView = [parent valueForKey:@"_crossfadeFolderView"]; } @catch (...) {}
-        }
-        if (!crossfadeView) {
-            g.hidden = NO;
-            g.alpha = 1.0;
-        }
-    }
-}
-
 CGFloat LGFolderIconCornerRadiusFallback(void) {
-
+    // app icon glass borrows this when its image view exposes no radius
     for (UIView *glass in sFolderIconGlasses.allObjects) {
         CGFloat radius = glass.layer.cornerRadius;
         if (isfinite(radius) && radius > 0.0) return radius;
@@ -94,34 +57,54 @@ CGFloat LGFolderIconCornerRadiusFallback(void) {
     return 0.0;
 }
 
-static void ensureFolderIconSubviewOrder(UIView *parent) {
-    if (!parent) return;
-    UIView *bg = nil;
-    UIView *grid = nil;
-    UIView *scaling = nil;
-    @try {
-        bg = [parent valueForKey:@"_backgroundView"];
-        grid = [parent valueForKey:@"_pageGridContainer"];
-        scaling = [parent valueForKey:@"_crossfadeScalingView"];
-    } @catch (...) {}
-
-    UIView *glass = glassForBackgroundView(bg);
-    if (glass && glass.superview == parent) {
-        if (bg) [parent insertSubview:glass aboveSubview:bg];
-        if (scaling) [parent insertSubview:glass belowSubview:scaling];
-        if (grid) [parent insertSubview:glass belowSubview:grid];
-    }
-
-    Class badgeClass = NSClassFromString(@"SBIconBadgeView");
-    for (UIView *sub in parent.subviews) {
-        if (badgeClass && [sub isKindOfClass:badgeClass]) {
-            [parent bringSubviewToFront:sub];
-        }
-    }
+static BOOL anyOpenFolderActive(void) {
+    for (UIView *m in sOpenFolderMaterials.allObjects)
+        if (m.window) return YES;
+    return NO;
 }
 
+static void hideFolderIconGlasses(void) {
+    LGFolderLog(@"[folder] hide active=%p super=%p window=%p", sActiveFolderIconGlass,
+                sActiveFolderIconGlass.superview, sActiveFolderIconGlass.window);
+    [sActiveFolderIconGlass.layer removeAllAnimations];
+    sActiveFolderIconGlass.alpha = 1.0;
+    sActiveFolderIconGlass.hidden = YES;
+}
+
+static void fadeInFolderIconGlasses(void) {
+    UIView *glass = nil;
+    CGFloat nearestDistance = CGFLOAT_MAX;
+    for (UIView *candidate in sFolderIconGlasses.allObjects) {
+        if (!candidate.window) continue;
+        CGPoint center = [candidate convertPoint:CGPointMake(CGRectGetMidX(candidate.bounds),
+                                                             CGRectGetMidY(candidate.bounds))
+                                      toView:candidate.window];
+        CGFloat distance = hypot(center.x - sActiveFolderIconCenter.x,
+                                 center.y - sActiveFolderIconCenter.y);
+        if (!sActiveFolderIconCenterKnown || distance >= nearestDistance) continue;
+        nearestDistance = distance;
+        glass = candidate;
+    }
+    LGFolderLog(@"[folder] fade requested active=%p super=%p window=%p open=%d materials=%lu",
+                glass, glass.superview, glass.window, anyOpenFolderActive(),
+                (unsigned long)sOpenFolderMaterials.allObjects.count);
+    if (!glass) return;
+    glass.hidden = NO;
+    glass.alpha = 0.0;
+    [UIView animateWithDuration:0.2 delay:0.0
+                        options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{ glass.alpha = 1.0; }
+                     completion:^(BOOL finished) {
+                         LGFolderLog(@"[folder] fade completed active=%p finished=%d alpha=%.2f hidden=%d",
+                                     glass, finished, glass.alpha, glass.hidden);
+                         sActiveFolderIconGlass = nil;
+                         sActiveFolderIconCenterKnown = NO;
+                     }];
+}
+
+#pragma mark - inject
+
 static void injectFolderIcon(UIView *mat) {
-    if (!mat) return;
     if (!sFolderIconMaterials) sFolderIconMaterials = [NSHashTable weakObjectsHashTable];
     [sFolderIconMaterials addObject:mat];
 
@@ -130,49 +113,30 @@ static void injectFolderIcon(UIView *mat) {
     if (!g) return;
     if (!sFolderIconGlasses) sFolderIconGlasses = [NSHashTable weakObjectsHashTable];
     [sFolderIconGlasses addObject:g];
-
-    if (mat.superview) {
-        objc_setAssociatedObject(mat.superview, kGlassKey, g, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-
-    UIView *folderImageView = nil;
-    Class folderCls = NSClassFromString(@"SBFolderIconImageView");
-    for (UIView *v = mat.superview; v; v = v.superview) {
-        if (folderCls && [v isKindOfClass:folderCls]) {
-            folderImageView = v;
-            break;
-        }
-    }
-
-    id crossfadeView = nil;
-    if (folderImageView) {
-        @try { crossfadeView = [folderImageView valueForKey:@"_crossfadeFolderView"]; } @catch (...) {}
-    }
-    if (crossfadeView || sOpenFolderIsOpen) {
-        g.hidden = YES;
-        g.alpha = 0.0;
-    } else {
-        g.hidden = NO;
-        g.alpha = 1.0;
-    }
-
-    ensureFolderIconSubviewOrder(folderImageView ?: mat.superview);
+    g.hidden = anyOpenFolderActive() && g == sActiveFolderIconGlass;
 }
 
 static void injectOpenFolder(UIView *mat) {
+    if (!mat.window) {
+        [sOpenFolderMaterials removeObject:mat];
+        LGRemoveGlassFromMaterial(mat, kGlassKey);
+        return;
+    }
     if (!LGInstallRegisteredGlassInMaterial(mat, kGlassKey, @"OpenFolder",
                                             UIEdgeInsetsZero, -1.0, nil)) {
         [sOpenFolderMaterials removeObject:mat];
-        if (!anyOpenFolderActive()) showAllFolderIconGlasses();
+        if (!anyOpenFolderActive()) fadeInFolderIconGlasses();
         return;
     }
     if (!sOpenFolderMaterials) sOpenFolderMaterials = [NSHashTable weakObjectsHashTable];
     if (![sOpenFolderMaterials containsObject:mat]) {
         [sOpenFolderMaterials addObject:mat];
+        LGFolderLog(@"[folder] open material attached=%p window=%p active=%p count=%lu",
+                    mat, mat.window, sActiveFolderIconGlass,
+                    (unsigned long)sOpenFolderMaterials.allObjects.count);
+        hideFolderIconGlasses();
     }
 }
-
-%group FolderHooks
 
 %hook MTMaterialView
 - (void)didMoveToWindow {
@@ -180,198 +144,59 @@ static void injectOpenFolder(UIView *mat) {
     UIView *self_ = (UIView *)self;
     if (!self_.window) {
         [sFolderIconMaterials removeObject:self_];
+
         if ([sOpenFolderMaterials containsObject:self_]) {
             [sOpenFolderMaterials removeObject:self_];
-            if (!anyOpenFolderActive()) {
-                showAllFolderIconGlasses();
-            }
+            LGFolderLog(@"[folder] open material detached=%p active=%p remaining=%lu",
+                        self_, sActiveFolderIconGlass,
+                        (unsigned long)sOpenFolderMaterials.allObjects.count);
+            LGRemoveGlassFromMaterial(self_, kGlassKey);
+            if (!anyOpenFolderActive()) fadeInFolderIconGlasses();
         }
         return;
     }
     if (isFolderIconMaterial(self_))      injectFolderIcon(self_);
     else if (isOpenFolderMaterial(self_)) injectOpenFolder(self_);
 }
-
 - (void)layoutSubviews {
     %orig;
     UIView *self_ = (UIView *)self;
     if (isFolderIconMaterial(self_))      injectFolderIcon(self_);
     else if (isOpenFolderMaterial(self_)) injectOpenFolder(self_);
 }
-
-- (void)setAlpha:(CGFloat)alpha {
-    %orig(alpha);
-    UIView *self_ = (UIView *)self;
-    if (isFolderIconMaterial(self_)) {
-        UIView *parent = self_.superview;
-        id crossfadeView = nil;
-        if (parent) {
-            @try { crossfadeView = [parent valueForKey:@"_crossfadeFolderView"]; } @catch (...) {}
-        }
-        UIView *glass = objc_getAssociatedObject(self_, kGlassKey);
-        if (!glass && parent) glass = objc_getAssociatedObject(parent, kGlassKey);
-        if (glass) {
-            if (crossfadeView || sOpenFolderIsOpen) {
-                glass.hidden = YES;
-                glass.alpha = 0.0;
-            } else {
-                glass.hidden = (alpha <= 0.001);
-                glass.alpha = alpha;
-            }
-        }
-    } else if (isOpenFolderMaterial(self_)) {
-        UIView *glass = objc_getAssociatedObject(self_, kGlassKey);
-        if (glass) glass.alpha = alpha;
-    }
-}
 %end
 
 %hook SBFolderIconImageView
 
-- (void)prepareToCrossfadeWithFloatyFolderView:(id)floatyFolderView allowFolderInteraction:(BOOL)allowFolderInteraction {
+- (void)prepareToCrossfadeWithFloatyFolderView:(id)floatyFolderView
+                        allowFolderInteraction:(BOOL)allowFolderInteraction {
     %orig;
-    if (sOpenFolderIsOpen) {
-        showAllFolderIconGlasses();
+    UIView *background = nil;
+    @try { background = [(UIView *)self valueForKey:@"_backgroundView"]; } @catch (...) {}
+    sActiveFolderIconGlass = folderIconGlass(background ?: (UIView *)self);
+    LGFolderLog(@"[folder] crossfade icon=%p background=%p active=%p floaty=%p interaction=%d",
+                self, background, sActiveFolderIconGlass, floatyFolderView,
+                allowFolderInteraction);
+    if (!allowFolderInteraction && ((UIView *)self).window) {
+        CGRect frame = [(UIView *)self convertRect:((UIView *)self).bounds
+                                            toView:((UIView *)self).window];
+        sActiveFolderIconCenter = CGPointMake(CGRectGetMidX(frame), CGRectGetMidY(frame));
+        sActiveFolderIconCenterKnown = YES;
     }
-    UIView *bg = nil;
-    @try { bg = [self valueForKey:@"_backgroundView"]; } @catch (...) {}
-    UIView *glass = glassForBackgroundView(bg);
-    if (glass) {
-        glass.hidden = YES;
-        glass.alpha = 0.0;
-    }
-}
-
-- (void)setFloatyFolderCrossfadeFraction:(CGFloat)fraction {
-    %orig(fraction);
-    if (fraction >= 0.999f && anyOpenFolderActive()) {
-        hideRemainingFolderIconGlasses(self);
-    } else if (fraction < 0.95f && sOpenFolderIsOpen) {
-        showAllFolderIconGlasses();
-    }
-
-    UIView *bg = nil;
-    @try { bg = [self valueForKey:@"_backgroundView"]; } @catch (...) {}
-    UIView *glass = glassForBackgroundView(bg);
-    if (glass) {
-        glass.hidden = YES;
-        glass.alpha = 0.0;
-    }
+    hideFolderIconGlasses();
 }
 
 - (void)setBackgroundAndIconGridImageAlpha:(CGFloat)alpha {
-    %orig(alpha);
-    id crossfadeView = nil;
-    @try { crossfadeView = [self valueForKey:@"_crossfadeFolderView"]; } @catch (...) {}
-    UIView *bg = nil;
-    @try { bg = [self valueForKey:@"_backgroundView"]; } @catch (...) {}
-    UIView *glass = glassForBackgroundView(bg);
-    if (glass) {
-        if (crossfadeView || sOpenFolderIsOpen) {
-            glass.hidden = YES;
-            glass.alpha = 0.0;
-        } else {
-            glass.hidden = (alpha <= 0.001);
-            glass.alpha = alpha;
-        }
-    }
-}
-
-- (void)layoutSubviews {
     %orig;
-    UIView *bg = nil;
-    @try { bg = [self valueForKey:@"_backgroundView"]; } @catch (...) {}
-    if (bg) {
-
-        Class matCls = NSClassFromString(@"MTMaterialView");
-        UIView *mat = (matCls && [bg isKindOfClass:matCls]) ? bg : nil;
-        if (!mat) {
-            for (UIView *sub in bg.subviews) {
-                if (matCls && [sub isKindOfClass:matCls]) {
-                    mat = sub;
-                    break;
-                }
-            }
-        }
-        if (mat) {
-            injectFolderIcon(mat);
-        }
-
-        id crossfadeView = nil;
-        @try { crossfadeView = [self valueForKey:@"_crossfadeFolderView"]; } @catch (...) {}
-        UIView *glass = glassForBackgroundView(bg);
-        if (glass) {
-            if (crossfadeView || sOpenFolderIsOpen) {
-                glass.hidden = YES;
-                glass.alpha = 0.0;
-            } else {
-                glass.hidden = NO;
-                glass.alpha = 1.0;
-            }
-        }
-    }
-    ensureFolderIconSubviewOrder(self);
-}
-
-- (void)cleanupAfterFloatyFolderCrossfade {
-    %orig;
-    UIView *bg = nil;
-    @try { bg = [self valueForKey:@"_backgroundView"]; } @catch (...) {}
-    UIView *glass = glassForBackgroundView(bg);
-    if (glass) {
-        if (anyOpenFolderActive()) {
-            glass.hidden = YES;
-            glass.alpha = 0.0;
-            hideRemainingFolderIconGlasses(self);
-        } else {
-            glass.hidden = NO;
-            glass.alpha = 1.0;
-            showAllFolderIconGlasses();
-        }
-    }
-    ensureFolderIconSubviewOrder(self);
+    UIView *background = nil;
+    @try { background = [(UIView *)self valueForKey:@"_backgroundView"]; } @catch (...) {}
+    UIView *glass = folderIconGlass(background ?: (UIView *)self);
+    if (!glass) return;
+    sActiveFolderIconGlass = glass;
+    glass.hidden = alpha <= 0.001;
+    glass.alpha = alpha;
+    LGFolderLog(@"[folder] icon alpha icon=%p glass=%p alpha=%.3f hidden=%d window=%p",
+                self, glass, alpha, glass.hidden, glass.window);
 }
 
 %end
-
-@interface SBFolderController : NSObject
-@end
-
-%hook SBFolderController
-
-- (void)folderControllerWillClose:(id)arg1 {
-    %orig;
-    showAllFolderIconGlasses();
-}
-
-- (void)folderControllerDidClose:(id)arg1 {
-    %orig;
-    showAllFolderIconGlasses();
-}
-
-%end
-
-%hook SBIconBadgeView
-
-- (void)didMoveToSuperview {
-    %orig;
-    if (self.superview) {
-        [self.superview bringSubviewToFront:self];
-    }
-}
-
-- (void)layoutSubviews {
-    %orig;
-    if (self.superview) {
-        [self.superview bringSubviewToFront:self];
-    }
-}
-
-%end
-
-%end
-
-%ctor {
-    if (!LGIsSpringBoardProcess()) return;
-    %init(FolderHooks);
-}

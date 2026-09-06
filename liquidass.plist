@@ -7,14 +7,7 @@
 		<key>Bundles</key>
 		<array>
 			<string>com.apple.UIKit</string>
-			<string>com.apple.springboard</string>
 			<string>com.apple.assistivetouchd</string>
-		</array>
-		<key>Executables</key>
-		<array>
-			<string>SpringBoard</string>
-			<string>MobileSafari</string>
-			<string>assistivetouchd</string>
 		</array>
 	</dict>
 </dict>

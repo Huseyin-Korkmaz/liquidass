@@ -2,7 +2,6 @@
 #import <objc/runtime.h>
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
-#import "../Shared/LGSharedSupport.h"
 
 static const void *kLGSpotlightOriginalTextTransformKey =
     &kLGSpotlightOriginalTextTransformKey;
@@ -79,7 +78,6 @@ static void LGUpdateSpotlightGlass(UIView *view) {
 %end
 
 %ctor {
-    if (!LGIsSpringBoardProcess()) return;
     if ([[NSProcessInfo processInfo] isOperatingSystemAtLeastVersion:
             (NSOperatingSystemVersion){16, 0, 0}]) {
         %init(LGSpotlightHooks);

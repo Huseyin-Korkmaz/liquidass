@@ -26,30 +26,6 @@ static CGFloat LGGoToTopCornerRadiusForView(UIView *view) {
     return MIN(CGRectGetWidth(view.bounds), CGRectGetHeight(view.bounds)) * kLGGoToTopCornerRadiusRatio;
 }
 
-static void LGRefreshCoverSheetBezelRatioControl(UIView *root, CGFloat cornerRadius) {
-    if (!root || [LGReadPreferenceObject(@"CoverSheet.BezelRatio", nil) isKindOfClass:[NSNumber class]]) {
-        return;
-    }
-
-    CGFloat screenWidth = UIScreen.mainScreen.bounds.size.width;
-    CGFloat ratio = screenWidth > 0.0 ? cornerRadius / screenWidth : 0.0;
-    ratio = MIN(1.0, MAX(0.0, ratio));
-    for (UIView *subview in root.subviews) {
-        if ([subview isKindOfClass:[UISlider class]]) {
-            UILabel *valueLabel = objc_getAssociatedObject(subview, kLGValueLabelKey);
-            NSString *key = objc_getAssociatedObject(valueLabel, kLGPreferenceKeyKey);
-            if ([key isEqualToString:@"CoverSheet.BezelRatio"]) {
-                UISlider *slider = (UISlider *)subview;
-                objc_setAssociatedObject(slider, kLGDefaultValueKey, @(ratio),
-                                         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                NSInteger decimals = [objc_getAssociatedObject(slider, kLGDecimalsKey) integerValue];
-                LGAnimateSliderToDefault(slider, ratio, valueLabel, decimals);
-            }
-        }
-        LGRefreshCoverSheetBezelRatioControl(subview, cornerRadius);
-    }
-}
-
 @interface LGGoToTopContainerView : UIView
 @end
 
@@ -952,18 +928,7 @@ static void LGRestartAssistiveTouchDaemon(void) {
 
 - (void)handleSliderValueLabelTapped:(UITapGestureRecognizer *)gesture {
     UILabel *valueLabel = (UILabel *)gesture.view;
-    NSString *preferenceKey = objc_getAssociatedObject(valueLabel, kLGPreferenceKeyKey);
-    if ([preferenceKey isEqualToString:@"CoverSheet.CornerRadius"]) {
-        __weak typeof(self) weakSelf = self;
-        LGPresentSliderValuePrompt(self, valueLabel, ^(CGFloat value) {
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (strongSelf) {
-                LGRefreshCoverSheetBezelRatioControl(strongSelf.view, value);
-            }
-        });
-    } else {
-        LGPresentSliderValuePrompt(self, valueLabel, nil);
-    }
+    LGPresentSliderValuePrompt(self, valueLabel, nil);
 }
 
 - (void)handleSliderInfoPressed:(UIButton *)sender {
@@ -1456,9 +1421,6 @@ static void LGRestartAssistiveTouchDaemon(void) {
                                      (__bridge CFStringRef)LGPrefsDomain);
             CFPreferencesAppSynchronize((__bridge CFStringRef)LGPrefsDomain);
             notify_post(LGPrefsChangedNotificationCString);
-        }
-        if ([preferenceKey isEqualToString:@"CoverSheet.CornerRadius"]) {
-            LGRefreshCoverSheetBezelRatioControl(self.view, value);
         }
     }] forControlEvents:commitEvents];
 

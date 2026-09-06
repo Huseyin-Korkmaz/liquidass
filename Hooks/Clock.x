@@ -62,6 +62,10 @@ static void LGClockProfileSample(BOOL applied, CFTimeInterval obstacle,
     *profile = (LGClockProfile){ .started = now };
 }
 
+
+
+
+
 static const char *kLGClockSharedMaskPath =
     "/var/mobile/Library/Accessibility/liquidglass-clock-mask-shared.bin";
 static const size_t kLGClockSharedMaskCapacity = 32 * 1024 * 1024;
@@ -79,6 +83,7 @@ typedef struct {
     float bezelWidthPoints;
 } LGClockSharedMaskHeader;
 
+// backboardd reads this packed alpha mask directly
 static void *LGClockSharedMaskMapping(void) {
     static void *mapping = MAP_FAILED;
     static dispatch_once_t once;
@@ -151,7 +156,7 @@ static BOOL LGClockPublishPath(CGPathRef path, CGSize size, CGFloat scale) {
         LGClockLog(@"mask publish has no shared mapping");
         return NO;
     }
-
+    // generation keeps stale async masks from winning
     static uint64_t generation = 0;
     LGClockSharedMaskHeader *header = (LGClockSharedMaskHeader *)mapping;
     uint64_t sequence = __atomic_load_n(&header->sequence, __ATOMIC_RELAXED);
@@ -521,7 +526,7 @@ static CGFloat LGClockNearestObstacleTop(UIView *container, CGRect clockFrame,
             candidateCount++;
             if (CGRectGetMinY(frame) < nearest) {
                 nearest = CGRectGetMinY(frame);
-                nearestView = nil;
+                nearestView = nil;   // no view to name, it is another process
                 nearestFrame = frame;
             }
         }
@@ -844,22 +849,22 @@ static void LGClockScheduleKnownStates(NSString *reason) {
 }
 
 - (void)trackMotion {
-    self.deadline = CACurrentMediaTime() + 0.35;
+    self.deadline = CACurrentMediaTime() + 0.30;
     self.displayLink.paused = NO;
 }
 
 - (void)tick:(CADisplayLink *)displayLink {
-    CFTimeInterval now = CACurrentMediaTime();
     BOOL hasClock = NO;
     for (LGClockState *state in LGClockStates().allObjects) {
         if (!state.host.window || !state.glassView) continue;
         hasClock = YES;
         [state updatePullBlur];
     }
-    if (now >= self.deadline || !hasClock) {
+    if (CACurrentMediaTime() >= self.deadline && !hasClock) {
         displayLink.paused = YES;
         return;
     }
+    if (CACurrentMediaTime() < self.deadline) LGClockScheduleKnownStates(@"motion");
 }
 
 @end
@@ -1011,7 +1016,7 @@ static UIColor *LGClockPullTint(UITraitCollection *traits) {
                                                    &nearestObstacleFrame,
                                                    &obstacleCandidates);
     CFTimeInterval profileObstacleEnd = CACurrentMediaTime();
-    if (nearestTop != CGFLOAT_MAX) nearestTop = round(nearestTop / 4.0) * 4.0;
+    if (nearestTop != CGFLOAT_MAX) nearestTop = round(nearestTop * 2.0) * 0.5;
     NSString *signature = [NSString stringWithFormat:@"%d|%d|%@|%.2f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f",
                            enabled, variableFontEnabled, label.text ?: label.attributedText.string,
                            self.originalFont.pointSize,
@@ -1535,10 +1540,6 @@ static void LGClockReconcilePreferenceReload(void) {
 
 static void LGClockObstacleDidChange(UIView *view) {
     if (view) [LGClockObstacleViews() addObject:view];
-    static CFTimeInterval sLastObstacleTime = 0;
-    CFTimeInterval now = CACurrentMediaTime();
-    if (now - sLastObstacleTime < 0.016) return;
-    sLastObstacleTime = now;
     LGClockScheduleKnownStates(@"obstacle");
     [[LGClockMotionTracker shared] trackMotion];
 }
@@ -1789,8 +1790,9 @@ static void LGPublishArtworkRect(UIView *artworkView) {
 %end
 
 %ctor {
-    if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]) return;
     if (objc_getClass("MRUArtworkView")) %init(LGNowPlayingArtwork);
+
+    if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]) return;
     LGClockLog(@"rewrite ctor os=%@ sim=%d font=%@ hostModern=%@ hostLegacy=%@ animLabel=%@ enabled=%d variable=%d",
                UIDevice.currentDevice.systemVersion, TARGET_OS_SIMULATOR,
                LGClockVariableFontPath(), NSClassFromString(@"CSProminentTimeView"),

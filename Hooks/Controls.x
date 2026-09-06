@@ -10,7 +10,7 @@
 #import "../Shared/LGGlassKit.h"
 #import "../Shared/LGLiquidMotion.h"
 #import "../Shared/LGLensRectState.h"
-#import "../LGFramework/LGButtonView.h"
+#import "../Shared/LGFramework.h"
 
 static void *kLGSettingsSwitchOverlayKey = &kLGSettingsSwitchOverlayKey;
 static void *kLGSettingsSliderOverlayKey = &kLGSettingsSliderOverlayKey;

@@ -1,7 +1,6 @@
 "prefs.app_name" = "Liquid (Gl)ass";
 
 "prefs.control.enabled" = "Włączony";
-"prefs.control.bezel_ratio" = "Stosunek obramowania";
 "prefs.control.blur" = "Rozmycie";
 "prefs.control.corner_radius" = "Zaokrąglenie rogów";
 "prefs.control.glass_thickness" = "Grubość szkła";
@@ -23,7 +22,6 @@
 "prefs.control.motion_highlights_sensitivity" = "Czułość ruchu";
 
 "prefs.subtitle.enabled" = "Włącz lub wyłącz widok szkła.";
-"prefs.subtitle.bezel_ratio" = "Szerokość krawędzi załamującej względem krótszego boku widoku szkła.";
 "prefs.subtitle.blur" = "Miękkość widoku szkła.";
 "prefs.subtitle.corner_radius" = "Zaokrąglenie widoku szkła.";
 "prefs.subtitle.glass_thickness" = "Głębokość objętości szkła — wizualnie nie zmienia zbyt wiele.";
@@ -190,3 +188,16 @@
 "prefs.subtitle.date_format_enabled" = "Replace the lockscreen date with a custom date format.";
 "prefs.control.date_format" = "Format";
 "prefs.subtitle.date_format" = "Uses Unicode date pattern syntax, for example EEE MMM d.";
+
+"prefs.notification.label_color.title" = "Label Color";
+"prefs.notification.label_color.subtitle" = "Choose white or black notification text.";
+"prefs.color.white" = "White";
+"prefs.color.black" = "Black";
+"prefs.surface.assistive_touch.title" = "AssistiveTouch";
+"prefs.surface.assistive_touch.subtitle" = "Customize AssistiveTouch liquid glass button";
+"prefs.surface.volume_hud.title" = "Volume HUD";
+"prefs.surface.volume_hud.subtitle" = "Sidebar elastic volume slider";
+"prefs.surface.pill_hud.title" = "Pill HUDs";
+"prefs.surface.pill_hud.subtitle" = "Mute, ringer, and DND alert pills";
+"prefs.control.keyboard_custom_font" = "Custom Font";
+"prefs.subtitle.keyboard_custom_font" = "Use the bundled SF Compact font for keyboard keys.";

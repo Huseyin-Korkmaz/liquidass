@@ -6,6 +6,7 @@
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
 #import "../Shared/LGSharedSupport.h"
+#import "../Shared/LGKeyboardState.h"
 
 @interface UIKeyboard : UIView
 + (instancetype)activeKeyboard;
@@ -21,6 +22,10 @@
 @end
 
 @interface UIKBVisualEffectView : UIView
+@end
+
+@interface LGSettingsLowBlurView : UIView
+@property (nonatomic) CGFloat lgBlurRadius;
 @end
 
 @interface UIKBRenderer : NSObject
@@ -51,10 +56,46 @@ static const void *kLGKeyboardVisualEffectRequestedHiddenKey =
     &kLGKeyboardVisualEffectRequestedHiddenKey;
 static const void *kLGKeyboardMaskKey = &kLGKeyboardMaskKey;
 static const void *kLGKeyboardBorderKey = &kLGKeyboardBorderKey;
+static const void *kLGKeyboardLowBlurKey = &kLGKeyboardLowBlurKey;
 static NSHashTable<UIView *> *gLGKeyboardBackdrops;
 static NSHashTable<UIView *> *gLGKeyboardVisualEffects;
 static NSUInteger gLGKeyboardBackdropLogCount;
 static BOOL gLGKeyboardKeyplaneRefreshScheduled;
+static UIDeviceOrientation gLGKeyboardLastLandscapeOrientation =
+    UIDeviceOrientationLandscapeLeft;
+static UIDeviceOrientation gLGKeyboardLastPortraitOrientation =
+    UIDeviceOrientationPortrait;
+
+static UIDeviceOrientation LGKeyboardDeviceOrientation(UIView *view) {
+    if (view.window) {
+        id<UICoordinateSpace> fixedSpace = view.window.screen.fixedCoordinateSpace;
+        CGRect bounds = view.bounds;
+        CGPoint origin = [view convertPoint:bounds.origin toCoordinateSpace:fixedSpace];
+        CGPoint xEdge = [view convertPoint:CGPointMake(CGRectGetMaxX(bounds), CGRectGetMinY(bounds))
+                          toCoordinateSpace:fixedSpace];
+        CGPoint yEdge = [view convertPoint:CGPointMake(CGRectGetMinX(bounds), CGRectGetMaxY(bounds))
+                          toCoordinateSpace:fixedSpace];
+        CGPoint xAxis = CGPointMake(xEdge.x - origin.x, xEdge.y - origin.y);
+        CGPoint yAxis = CGPointMake(yEdge.x - origin.x, yEdge.y - origin.y);
+        if (fabs(xAxis.x) > fabs(xAxis.y) && fabs(yAxis.y) > fabs(yAxis.x)) {
+            UIDeviceOrientation orientation = xAxis.x < 0.0 && yAxis.y < 0.0
+                ? UIDeviceOrientationPortraitUpsideDown : UIDeviceOrientationPortrait;
+            gLGKeyboardLastPortraitOrientation = orientation;
+            return orientation;
+        }
+    }
+    UIDeviceOrientation orientation = UIDevice.currentDevice.orientation;
+    if (UIDeviceOrientationIsLandscape(orientation)) {
+        gLGKeyboardLastLandscapeOrientation = orientation;
+        return orientation;
+    }
+    if (UIDeviceOrientationIsPortrait(orientation)) {
+        gLGKeyboardLastPortraitOrientation = orientation;
+        return orientation;
+    }
+    return CGRectGetWidth(view.bounds) > CGRectGetHeight(view.bounds)
+        ? gLGKeyboardLastLandscapeOrientation : gLGKeyboardLastPortraitOrientation;
+}
 
 static CGFloat LGKeyboardCornerRadius(void) {
     return fmin(60.0, fmax(0.0,
@@ -479,6 +520,38 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
         glass.layer.cornerCurve = kCACornerCurveContinuous;
     }
     LGUpdateKeyboardBorder(glass);
+    UIDeviceOrientation orientation = LGKeyboardDeviceOrientation(glass);
+    LGKeyboardWriteSharedState(true, (uint32_t)orientation);
+    static UIDeviceOrientation lastLoggedOrientation = UIDeviceOrientationUnknown;
+    static NSUInteger orientationLogCount;
+    if (orientation != lastLoggedOrientation || orientationLogCount < 12) {
+        lastLoggedOrientation = orientation;
+        orientationLogCount++;
+        CGPoint origin = CGPointZero;
+        CGPoint xAxis = CGPointZero;
+        CGPoint yAxis = CGPointZero;
+        if (glass.window) {
+            id<UICoordinateSpace> fixedSpace = glass.window.screen.fixedCoordinateSpace;
+            origin = [glass convertPoint:glass.bounds.origin
+                         toCoordinateSpace:fixedSpace];
+            CGPoint xEdge = [glass convertPoint:
+                CGPointMake(CGRectGetMaxX(glass.bounds), CGRectGetMinY(glass.bounds))
+                         toCoordinateSpace:fixedSpace];
+            CGPoint yEdge = [glass convertPoint:
+                CGPointMake(CGRectGetMinX(glass.bounds), CGRectGetMaxY(glass.bounds))
+                         toCoordinateSpace:fixedSpace];
+            xAxis = CGPointMake(xEdge.x - origin.x, xEdge.y - origin.y);
+            yAxis = CGPointMake(yEdge.x - origin.x, yEdge.y - origin.y);
+        }
+        LGLog(@"[keyboard-orientation] resolved=%ld device=%ld interface=%ld "
+              "bounds=%@ frame=%@ axes={x:%.1f,%.1f y:%.1f,%.1f} "
+              "prediction=%d overhang=%.1f",
+              (long)orientation, (long)UIDevice.currentDevice.orientation,
+              (long)glass.window.windowScene.interfaceOrientation,
+              NSStringFromCGRect(glass.bounds), NSStringFromCGRect(glass.frame),
+              xAxis.x, xAxis.y, yAxis.x, yAxis.y,
+              hasPredictionStrip, LGKeyboardTopOverhang());
+    }
     glass.alpha = primary.alpha;
     glass.hidden =
         [objc_getAssociatedObject(primary, kLGKeyboardRequestedHiddenKey)
@@ -499,6 +572,35 @@ static void LGKeyboardSetVisualEffectHidden(UIView *effectView, BOOL hidden) {
                              nil, OBJC_ASSOCIATION_ASSIGN);
 }
 
+static void LGKeyboardUpdateLowBlur(UIView *effectView) {
+    UIView *blur = objc_getAssociatedObject(effectView, kLGKeyboardLowBlurKey);
+    BOOL enabled = lgHostEnabled(@"Keyboard");
+    if (!enabled || !effectView.superview) {
+        blur.hidden = YES;
+        return;
+    }
+
+    if (!blur) {
+        Class blurClass = NSClassFromString(@"LGSettingsLowBlurView");
+        if (!blurClass) return;
+        blur = [[blurClass alloc] initWithFrame:effectView.frame];
+        blur.userInteractionEnabled = NO;
+        blur.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+                                 UIViewAutoresizingFlexibleHeight;
+        [effectView.superview insertSubview:blur belowSubview:effectView];
+        objc_setAssociatedObject(effectView, kLGKeyboardLowBlurKey, blur,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    blur.frame = effectView.frame;
+    @try {
+        [blur setValue:@(LG_prefFloat(@"Keyboard.Blur", 8.0))
+                forKey:@"lgBlurRadius"];
+    } @catch (__unused NSException *exception) {}
+    blur.hidden = [objc_getAssociatedObject(
+        effectView, kLGKeyboardVisualEffectRequestedHiddenKey) boolValue];
+}
+
 static void LGUpdateKeyboardVisualEffect(UIView *effectView) {
     if (!effectView.window) return;
     BOOL requestedHidden =
@@ -508,6 +610,7 @@ static void LGUpdateKeyboardVisualEffect(UIView *effectView) {
 
     LGKeyboardSetVisualEffectHidden(effectView,
                                     lgHostEnabled(@"Keyboard") ? YES : requestedHidden);
+    LGKeyboardUpdateLowBlur(effectView);
 }
 
 %hook UIKBBackdropView
@@ -592,6 +695,7 @@ static void LGUpdateKeyboardVisualEffect(UIView *effectView) {
                              @(hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (lgHostEnabled(@"Keyboard")) {
         %orig(YES);
+        LGKeyboardUpdateLowBlur(self);
         return;
     }
     %orig(hidden);
@@ -698,6 +802,27 @@ static void LGUpdateKeyboardVisualEffect(UIView *effectView) {
 %ctor {
     gLGKeyboardBackdrops = [NSHashTable weakObjectsHashTable];
     gLGKeyboardVisualEffects = [NSHashTable weakObjectsHashTable];
+    [UIDevice.currentDevice beginGeneratingDeviceOrientationNotifications];
+    [[NSNotificationCenter defaultCenter]
+        addObserverForName:UIDeviceOrientationDidChangeNotification
+                    object:nil
+                     queue:NSOperationQueue.mainQueue
+                usingBlock:^(__unused NSNotification *notification) {
+        for (UIView *stock in gLGKeyboardBackdrops.allObjects) {
+            if (LGIsRemoteKeyboardWindow(stock.window))
+                LGUpdateKeyboardGlass(stock);
+        }
+        for (UIView *effectView in gLGKeyboardVisualEffects.allObjects) {
+            LGUpdateKeyboardVisualEffect(effectView);
+        }
+        LGKeyboardScheduleKeyplaneRefresh();
+        dispatch_async(dispatch_get_main_queue(), ^{
+            for (UIView *stock in gLGKeyboardBackdrops.allObjects) {
+                if (LGIsRemoteKeyboardWindow(stock.window))
+                    LGUpdateKeyboardGlass(stock);
+            }
+        });
+    }];
     LGLog(@"[keyboard] ctor process=%@ bundle=%@ backdrop=%d visualEffect=%d",
           NSProcessInfo.processInfo.processName,
           NSBundle.mainBundle.bundleIdentifier ?: @"(nil)",
