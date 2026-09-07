@@ -135,6 +135,8 @@
 "prefs.misc.respring.subtitle" = "Restart SpringBoard";
 "prefs.misc.exit_safe_mode.title" = "Exit Safe Mode";
 "prefs.misc.exit_safe_mode.subtitle" = "Exit Liquid (Gl)ass safe mode if active.";
+"prefs.misc.support.title" = "Join our Support Server";
+"prefs.misc.support.subtitle" = "Get help and updates on Discord";
 "prefs.misc.about.title" = "More Options";
 "prefs.misc.about.subtitle" = "Additional controls and advanced preferences.";
 "prefs.misc.prefs_settings.title" = "About";

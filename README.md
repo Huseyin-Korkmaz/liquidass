@@ -1,5 +1,3 @@
-
-
 # Liquid (Gl)ass
 This tweak is incomplete, issues WILL happen.
 
@@ -7,14 +5,18 @@ Nightly builds that contains the bleeding edge changes are available [here](http
 
 ## Localization
 
+```
 Usage: tools/localizations.rb COMMAND [PATH]
 
   validate                 see if stuff are correct
   clean                    remove unused english keys and translated keys
   sync                     add missing locale keys using english values
   export-template [PATH]   export active english strings to PATH, or stdout
+```
+## License
+As of version 0.1.1b, this tweak has now been licensed under CC BY-NC 4.0, replacing the older GPLv3 license. You cannot sell, re-license, or commercialize the tweak. You are free to share and adapt the code for non-commercial purposes, provided you give appropriate attribution to the original author (me, dylv/winaviation). For full details, see the [CC BY-NC 4.0 License](LICENSE).
 
-## donation
+## Donation
 i only accept crypto for now, wallet addreses:
 ```
 BTC: bc1qlv830emqsffqslns2e3kglkgcdnlag0nfnyj4k

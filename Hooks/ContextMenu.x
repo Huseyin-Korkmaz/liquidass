@@ -633,9 +633,9 @@ static UIColor *LGCtxMenuPillColor(UIView *view) {
     if (!CGRectEqualToRect(self.frame, targetFrame)) {
         self.frame = targetFrame;
     }
-    CGFloat pillRadius = MIN(13.0, CGRectGetHeight(targetFrame) * 0.5);
-    if (fabs(self.layer.cornerRadius - pillRadius) > 0.5) {
-        self.layer.cornerRadius = pillRadius;
+    CGFloat radius = CGRectGetHeight(targetFrame) * 0.5;
+    if (fabs(self.layer.cornerRadius - radius) > 0.5) {
+        self.layer.cornerRadius = radius;
     }
     self.layer.cornerCurve = kCACornerCurveContinuous;
     self.backgroundColor = LGCtxMenuPillColor(self);
