@@ -188,6 +188,11 @@ static CGFloat LGClockFontScale(void) {
     return LG_prefFloat(@"Clock.VariableFont.SizeScale", 1.4);
 }
 
+static NSInteger LGClockFPSLimit(void) {
+    NSInteger maximum = UIScreen.mainScreen.maximumFramesPerSecond;
+    return MIN(maximum, MAX(1, (NSInteger)llround(LG_prefFloat(@"Clock.FPS", maximum))));
+}
+
 static const CGFloat kLGClockVerticalOffset = 10.0;
 
 static CGFloat LGClockAxisValue(NSString *axis) {
@@ -488,6 +493,12 @@ static CGRect LGClockObstacleFrame(UIView *view, UIView *container) {
     return [view convertRect:view.bounds toView:container];
 }
 
+static CGRect LGClockPresentationFrameInWindow(UIView *view, UIWindow *window) {
+    CALayer *presentation = view.layer.presentationLayer;
+    return presentation ? [window.layer convertRect:presentation.bounds fromLayer:presentation]
+                        : CGRectNull;
+}
+
 static CGFloat LGClockNearestObstacleTop(UIView *container, CGRect clockFrame,
                                          UIView **nearestViewOut,
                                          CGRect *nearestFrameOut,
@@ -729,6 +740,7 @@ static NSString *LGClockVariableFontPath(void) {
 @property (nonatomic) BOOL pullBlurActive;
 @property (nonatomic) BOOL pullBlurKnown;
 - (void)scheduleApply:(NSString *)reason;
+- (void)applyReason:(NSString *)reason;
 - (void)updatePullBlur;
 - (void)restore;
 @end
@@ -817,12 +829,6 @@ static NSHashTable<LGClockState *> *LGClockStates(void) {
     return states;
 }
 
-static void LGClockScheduleKnownStates(NSString *reason) {
-    for (LGClockState *state in LGClockStates().allObjects) {
-        if (state.host.window) [state scheduleApply:reason];
-    }
-}
-
 @interface LGClockMotionTracker : NSObject
 @property (nonatomic, strong) CADisplayLink *displayLink;
 @property (nonatomic) CFTimeInterval deadline;
@@ -843,6 +849,7 @@ static void LGClockScheduleKnownStates(NSString *reason) {
     self = [super init];
     if (!self) return nil;
     _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
+    _displayLink.preferredFramesPerSecond = UIScreen.mainScreen.maximumFramesPerSecond;
     _displayLink.paused = YES;
     [_displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
     return self;
@@ -850,21 +857,24 @@ static void LGClockScheduleKnownStates(NSString *reason) {
 
 - (void)trackMotion {
     self.deadline = CACurrentMediaTime() + 0.30;
+    self.displayLink.preferredFramesPerSecond = LGClockFPSLimit();
     self.displayLink.paused = NO;
 }
 
 - (void)tick:(CADisplayLink *)displayLink {
-    BOOL hasClock = NO;
+    CFTimeInterval now = CACurrentMediaTime();
+    BOOL settled = now >= self.deadline;
+    BOOL pullActive = NO;
     for (LGClockState *state in LGClockStates().allObjects) {
         if (!state.host.window || !state.glassView) continue;
-        hasClock = YES;
         [state updatePullBlur];
+        pullActive |= state.pullBlurActive;
+        if (!state.applying)
+            [state applyReason:@"motion"];
     }
-    if (CACurrentMediaTime() >= self.deadline && !hasClock) {
+    if (settled && !pullActive) {
         displayLink.paused = YES;
-        return;
     }
-    if (CACurrentMediaTime() < self.deadline) LGClockScheduleKnownStates(@"motion");
 }
 
 @end
@@ -940,9 +950,12 @@ static UIColor *LGClockPullTint(UITraitCollection *traits) {
     UIWindow *window = container.window;
     if (!window || !self.glassView || !self.pullBlurView || !self.sourceLabel) return;
     CGRect frame = [container convertRect:container.bounds toView:window];
-    BOOL active = fabs(CGRectGetMinX(frame) - CGRectGetMinX(window.bounds)) > 0.5 ||
-                  fabs(CGRectGetMinY(frame) - CGRectGetMinY(window.bounds)) > 0.5;
-    if (self.pullBlurKnown && active == self.pullBlurActive) return;
+    CGRect presentationFrame = LGClockPresentationFrameInWindow(container, window);
+    CGRect movementFrame = CGRectIsNull(presentationFrame) ? frame : presentationFrame;
+    BOOL active = fabs(CGRectGetMinX(movementFrame) - CGRectGetMinX(window.bounds)) > 0.5 ||
+                  fabs(CGRectGetMinY(movementFrame) - CGRectGetMinY(window.bounds)) > 0.5;
+    BOOL changed = !self.pullBlurKnown || active != self.pullBlurActive;
+    if (!changed) return;
     self.pullBlurKnown = YES;
     self.pullBlurActive = active;
     self.pullBlurView.backgroundColor = active
@@ -1016,7 +1029,7 @@ static UIColor *LGClockPullTint(UITraitCollection *traits) {
                                                    &nearestObstacleFrame,
                                                    &obstacleCandidates);
     CFTimeInterval profileObstacleEnd = CACurrentMediaTime();
-    if (nearestTop != CGFLOAT_MAX) nearestTop = round(nearestTop * 2.0) * 0.5;
+    if (nearestTop != CGFLOAT_MAX) nearestTop = round(nearestTop);
     NSString *signature = [NSString stringWithFormat:@"%d|%d|%@|%.2f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f|%.1f",
                            enabled, variableFontEnabled, label.text ?: label.attributedText.string,
                            self.originalFont.pointSize,
@@ -1113,18 +1126,23 @@ static UIColor *LGClockPullTint(UITraitCollection *traits) {
                     font = [fontStore fontAtPointSize:pointSize heightAxis:resolvedHeightAxis] ?: font;
                 }
             }
-            NSString *fontDiagnostic = [NSString stringWithFormat:
-                @"host=%@ label=%p text=%@ variable=%d source={%@} attributed={%@} original={%@} render={%@} renderIsCustom=%d sourceSize=%.2f scale=%.3f axes=%@ requested[w=%.1f wd=%.1f h=%.1f soft=%.1f] resolvedHeight=%.1f availableHeight=%.1f reason=%@",
-                NSStringFromClass(host.class), label, text, variableFontEnabled,
-                LGClockFontSummary(label.font), LGClockFontSummary(LGClockAttributedFont(label)),
-                LGClockFontSummary(self.originalFont), LGClockFontSummary(font),
-                LGClockIsOurFont(font), sourceSize, LGClockFontScale(), fontStore.axisIDs ?: @{},
-                LGClockAxisValue(@"weight"), LGClockAxisValue(@"width"),
-                requestedHeightAxis, LGClockAxisValue(@"softness"), resolvedHeightAxis,
-                availableHeight, reason];
-            if (![fontDiagnostic isEqualToString:self.lastFontDiagnostic]) {
-                self.lastFontDiagnostic = fontDiagnostic;
-                LGClockLog(@"font decision %@", fontDiagnostic);
+            if (LGDebugLoggingEnabled() &&
+                ![reason isEqualToString:@"motion"] &&
+                ![reason isEqualToString:@"obstacle"] &&
+                ![reason isEqualToString:@"prefs"]) {
+                NSString *fontDiagnostic = [NSString stringWithFormat:
+                    @"host=%@ label=%p text=%@ variable=%d source={%@} attributed={%@} original={%@} render={%@} renderIsCustom=%d sourceSize=%.2f scale=%.3f axes=%@ requested[w=%.1f wd=%.1f h=%.1f soft=%.1f] resolvedHeight=%.1f availableHeight=%.1f reason=%@",
+                    NSStringFromClass(host.class), label, text, variableFontEnabled,
+                    LGClockFontSummary(label.font), LGClockFontSummary(LGClockAttributedFont(label)),
+                    LGClockFontSummary(self.originalFont), LGClockFontSummary(font),
+                    LGClockIsOurFont(font), sourceSize, LGClockFontScale(), fontStore.axisIDs ?: @{},
+                    LGClockAxisValue(@"weight"), LGClockAxisValue(@"width"),
+                    requestedHeightAxis, LGClockAxisValue(@"softness"), resolvedHeightAxis,
+                    availableHeight, reason];
+                if (![fontDiagnostic isEqualToString:self.lastFontDiagnostic]) {
+                    self.lastFontDiagnostic = fontDiagnostic;
+                    LGClockLog(@"font decision %@", fontDiagnostic);
+                }
             }
             NSDictionary *attributes = @{ (__bridge id)kCTFontAttributeName: font };
             NSAttributedString *string = [[NSAttributedString alloc] initWithString:text ?: @""
@@ -1245,7 +1263,8 @@ static UIColor *LGClockPullTint(UITraitCollection *traits) {
             }
             glass.maskView = maskView;
             [CATransaction commit];
-            [[LGClockMotionTracker shared] trackMotion];
+            if (![reason isEqualToString:@"motion"])
+                [[LGClockMotionTracker shared] trackMotion];
             BOOL filterReady = glass.lgFilterAttached;
             label.alpha = filterReady ? 0.0 : self.originalLabelAlpha;
             label.hidden = self.originalLabelHidden;
@@ -1261,10 +1280,8 @@ static UIColor *LGClockPullTint(UITraitCollection *traits) {
             CGRect glassWindowFrame = glass.window
                 ? [glass convertRect:glass.bounds toView:glass.window] : CGRectNull;
             BOOL obstacleChanged = nearestObstacle != self.lastNearestObstacle;
-            BOOL nearestJumped = self.lastNearestTop != 0.0 && nearestTop != CGFLOAT_MAX &&
-                fabs(nearestTop - self.lastNearestTop) > 4.0;
             BOOL phaseChanged = ![retractionPhase isEqualToString:self.lastRetractionPhase];
-            if (obstacleChanged || nearestJumped || phaseChanged) {
+            if (obstacleChanged || phaseChanged) {
                 CALayer *obstaclePresentation = nearestObstacle.layer.presentationLayer;
                 CGRect obstacleWindowFrame = nearestObstacle.window
                     ? [nearestObstacle convertRect:nearestObstacle.bounds
@@ -1494,7 +1511,9 @@ static void LGClockHostDidMove(UIView *host) {
 
 static void LGClockHostDidLayout(UIView *host) {
     if (!LGClockEnabled()) return;
-    [LGClockStateForHost(host, YES) scheduleApply:@"layout"];
+    LGClockState *state = LGClockStateForHost(host, YES);
+    if (!state.glassView) [state scheduleApply:@"layout"];
+    [[LGClockMotionTracker shared] trackMotion];
 }
 
 static void LGClockRefreshWindows(void) {
@@ -1540,12 +1559,11 @@ static void LGClockReconcilePreferenceReload(void) {
 
 static void LGClockObstacleDidChange(UIView *view) {
     if (view) [LGClockObstacleViews() addObject:view];
-    LGClockScheduleKnownStates(@"obstacle");
     [[LGClockMotionTracker shared] trackMotion];
 }
 
 void LGScheduleClockRecoveryRefreshForPresentationChange(void) {
-    dispatch_async(dispatch_get_main_queue(), ^{ LGClockRefreshWindows(); });
+    [[LGClockMotionTracker shared] trackMotion];
 }
 
 @interface MRUArtworkView : UIView
@@ -1804,7 +1822,19 @@ static void LGPublishArtworkRect(UIView *artworkView) {
                     object:nil
                      queue:NSOperationQueue.mainQueue
                 usingBlock:^(__unused NSNotification *note) {
-                    LGClockRefreshWindows();
+                    LGLiveBackdropView *attached = note.object;
+                    for (LGClockState *state in LGClockStates().allObjects) {
+                        if (state.glassView != attached) continue;
+                        UILabel *label = state.sourceLabel;
+                        label.alpha = 0.0;
+                        UIView *visible = state.visibleSourceView;
+                        if (visible && visible != label) {
+                            visible.hidden = YES;
+                            visible.alpha = 0.0;
+                            visible.layer.opacity = 0.0;
+                        }
+                        break;
+                    }
                 }];
     lgObservePreferenceReload(^{ LGClockReconcilePreferenceReload(); });
     %init(LGClockRewrite);

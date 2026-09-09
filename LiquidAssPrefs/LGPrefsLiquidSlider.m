@@ -53,7 +53,7 @@ static NSArray<NSNumber *> *LGSliderEndpointCenters(UISlider *slider) {
 }
 
 static CGFloat LGSliderThumbCenterXForValue(UISlider *slider, float value) {
-    // segmented and continuous tracks share one visual motion path
+
     NSInteger snapPointCount = LGSliderSnapPointCount(slider);
     NSArray<NSNumber *> *segmentCenters = LGSliderSegmentCenters(slider);
     float range = slider.maximumValue - slider.minimumValue;
@@ -429,7 +429,7 @@ static UIColor *LGSliderInactiveTrackColor(UITraitCollection *traitCollection) {
 }
 
 - (void)updatePresentedThumbForTouchX:(CGFloat)touchX {
-    // logical value stays clamped while the visible thumb can overhang
+
     CGFloat minX = [self minimumThumbCenterX];
     CGFloat maxX = [self maximumThumbCenterX];
     CGFloat clampedX = fmax(minX, fmin(touchX, maxX));

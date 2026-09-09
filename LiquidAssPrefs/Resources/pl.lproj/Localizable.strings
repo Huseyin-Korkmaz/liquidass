@@ -1,7 +1,6 @@
 "prefs.app_name" = "Liquid (Gl)ass";
 
 "prefs.control.enabled" = "Włączony";
-"prefs.control.bezel_ratio" = "Stosunek obramowania";
 "prefs.control.blur" = "Rozmycie";
 "prefs.control.corner_radius" = "Zaokrąglenie rogów";
 "prefs.control.glass_thickness" = "Grubość szkła";
@@ -23,7 +22,6 @@
 "prefs.control.motion_highlights_sensitivity" = "Czułość ruchu";
 
 "prefs.subtitle.enabled" = "Włącz lub wyłącz widok szkła.";
-"prefs.subtitle.bezel_ratio" = "Szerokość krawędzi załamującej względem krótszego boku widoku szkła.";
 "prefs.subtitle.blur" = "Miękkość widoku szkła.";
 "prefs.subtitle.corner_radius" = "Zaokrąglenie widoku szkła.";
 "prefs.subtitle.glass_thickness" = "Głębokość objętości szkła — wizualnie nie zmienia zbyt wiele.";
@@ -151,12 +149,12 @@
 "prefs.misc.settings_controls.title" = "Ustawienia iOS 26";
 "prefs.misc.settings_controls.subtitle" = "Próbuje odtworzyć doświadczenie aplikacji Ustawienia iOS 26.";
 "prefs.surface.global_controls.title" = "Sterowanie";
-"prefs.global_controls.exclusions.title" = "Lista wykluczeń";
-"prefs.global_controls.exclusions.subtitle" = "Pomiń niestandardowe sterowanie dla pasujących identyfikatorów bundle lub nazw plików wykonywalnych.";
+"prefs.global_controls.exclusions.title" = "Wykluczone aplikacje";
+"prefs.global_controls.exclusions.subtitle" = "Wybierz aplikacje, które mają zachować standardowe elementy sterujące.";
 "prefs.global_controls.exclusions.body" = "Wprowadź jeden identyfikator bundle lub nazwę pliku wykonywalnego w wierszu. Zmiany są stosowane po ponownym otwarciu dotkniętej aplikacji.";
 "prefs.global_controls.exclusions.placeholder" = "com.example.app\nExampleExecutable";
-"prefs.tab_bar.exclusions.title" = "Exclusion List";
-"prefs.tab_bar.exclusions.subtitle" = "Skip tab bars in matching bundle IDs or executable names.";
+"prefs.tab_bar.exclusions.title" = "Wykluczone aplikacje";
+"prefs.tab_bar.exclusions.subtitle" = "Wybierz aplikacje, które mają zachować standardowy pasek kart.";
 "prefs.tab_bar.exclusions.body" = "Enter one bundle ID or executable name per line. Changes apply after reopening the affected app.";
 "prefs.tab_bar.exclusions.placeholder" = "com.example.app\nExampleExecutable";
 "prefs.global_controls.section.title" = "Niestandardowe sterowanie";
@@ -182,7 +180,6 @@
 "prefs.misc.export_logs.title" = "Eksportuj logi";
 "prefs.export_logs.none" = "Nie znaleziono zapisanych logów.";
 
-/* TODO: Translate synced English fallback strings. */
 "prefs.control.bezel_width" = "Bezel Width";
 "prefs.subtitle.bezel_width" = "Width of the refracting edge around the clock glyphs, in points.";
 "prefs.section.lockscreen_date_label.title" = "Date Label";
@@ -191,3 +188,19 @@
 "prefs.subtitle.date_format_enabled" = "Replace the lockscreen date with a custom date format.";
 "prefs.control.date_format" = "Format";
 "prefs.subtitle.date_format" = "Uses Unicode date pattern syntax, for example EEE MMM d.";
+
+"prefs.notification.label_color.title" = "Label Color";
+"prefs.notification.label_color.subtitle" = "Choose white or black notification text.";
+"prefs.color.white" = "White";
+"prefs.color.black" = "Black";
+"prefs.surface.assistive_touch.title" = "AssistiveTouch";
+"prefs.surface.assistive_touch.subtitle" = "Customize AssistiveTouch liquid glass button";
+"prefs.surface.volume_hud.title" = "Volume HUD";
+"prefs.surface.volume_hud.subtitle" = "Sidebar elastic volume slider";
+"prefs.surface.pill_hud.title" = "Pill HUDs";
+"prefs.surface.pill_hud.subtitle" = "Mute, ringer, and DND alert pills";
+"prefs.control.keyboard_custom_font" = "Custom Font";
+"prefs.subtitle.keyboard_custom_font" = "Use the bundled SF Compact font for keyboard keys.";
+
+"prefs.misc.support.title" = "Join our Support Server";
+"prefs.misc.support.subtitle" = "Get help and updates on Discord";

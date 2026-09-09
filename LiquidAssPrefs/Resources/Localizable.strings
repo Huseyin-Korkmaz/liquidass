@@ -1,7 +1,6 @@
 "prefs.app_name" = "Liquid (Gl)ass";
 
 "prefs.control.enabled" = "Enabled";
-"prefs.control.bezel_ratio" = "Bezel Ratio";
 "prefs.control.blur" = "Blur";
 "prefs.control.corner_radius" = "Corner Radius";
 "prefs.control.glass_thickness" = "Glass Thickness";
@@ -27,7 +26,6 @@
 "prefs.color.black" = "Black";
 
 "prefs.subtitle.enabled" = "Turn this glass view on or off.";
-"prefs.subtitle.bezel_ratio" = "Width of the refracting edge relative to the glass view's short side.";
 "prefs.subtitle.blur" = "Softness of the glass view.";
 "prefs.subtitle.corner_radius" = "Roundness of the glass view.";
 "prefs.subtitle.glass_thickness" = "Depth of the glass volume, visually it does not change anything much.";
@@ -127,10 +125,18 @@
 "prefs.surface.keyboard.title" = "Keyboard";
 "prefs.surface.tab_bar.title" = "Tab Bar";
 "prefs.surface.tab_bar_selection.title" = "Selection Lens";
+"prefs.surface.assistive_touch.title" = "AssistiveTouch";
+"prefs.surface.assistive_touch.subtitle" = "Customize AssistiveTouch liquid glass button";
+"prefs.surface.volume_hud.title" = "Volume HUD";
+"prefs.surface.volume_hud.subtitle" = "Sidebar elastic volume slider";
+"prefs.surface.pill_hud.title" = "Pill HUDs";
+"prefs.surface.pill_hud.subtitle" = "Mute, ringer, and DND alert pills";
 "prefs.misc.respring.title" = "Respring";
 "prefs.misc.respring.subtitle" = "Restart SpringBoard";
 "prefs.misc.exit_safe_mode.title" = "Exit Safe Mode";
 "prefs.misc.exit_safe_mode.subtitle" = "Exit Liquid (Gl)ass safe mode if active.";
+"prefs.misc.support.title" = "Join our Support Server";
+"prefs.misc.support.subtitle" = "Get help and updates on Discord";
 "prefs.misc.about.title" = "More Options";
 "prefs.misc.about.subtitle" = "Additional controls and advanced preferences.";
 "prefs.misc.prefs_settings.title" = "About";
@@ -157,12 +163,12 @@
 "prefs.misc.settings_controls.title" = "iOS 26 Settings";
 "prefs.misc.settings_controls.subtitle" = "Tries to replicate iOS 26 Settings app experience.";
 "prefs.surface.global_controls.title" = "Controls";
-"prefs.global_controls.exclusions.title" = "Exclusion List";
-"prefs.global_controls.exclusions.subtitle" = "Skip custom controls in matching bundle IDs or executable names.";
+"prefs.global_controls.exclusions.title" = "Excluded Apps";
+"prefs.global_controls.exclusions.subtitle" = "Choose apps that should keep their stock controls.";
 "prefs.global_controls.exclusions.body" = "Enter one bundle ID or executable name per line. Changes apply after reopening the affected app.";
 "prefs.global_controls.exclusions.placeholder" = "com.example.app\nExampleExecutable";
-"prefs.tab_bar.exclusions.title" = "Exclusion List";
-"prefs.tab_bar.exclusions.subtitle" = "Skip tab bars in matching bundle IDs or executable names.";
+"prefs.tab_bar.exclusions.title" = "Excluded Apps";
+"prefs.tab_bar.exclusions.subtitle" = "Choose apps that should keep their stock tab bar.";
 "prefs.tab_bar.exclusions.body" = "Enter one bundle ID or executable name per line. Changes apply after reopening the affected app.";
 "prefs.tab_bar.exclusions.placeholder" = "com.example.app\nExampleExecutable";
 "prefs.global_controls.section.title" = "Custom Controls";
@@ -194,3 +200,5 @@
 "prefs.subtitle.date_format_enabled" = "Replace the lockscreen date with a custom date format.";
 "prefs.control.date_format" = "Format";
 "prefs.subtitle.date_format" = "Uses Unicode date pattern syntax, for example EEE MMM d.";
+"prefs.control.clock_fps_limit" = "FPS Limit";
+"prefs.subtitle.clock_fps_limit" = "Limits clock animation updates.";

@@ -7,6 +7,7 @@
 #import "../Shared/LGCoverSheetState.h"
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 #include <time.h>
 #include <sys/time.h>
 #include <errno.h>
@@ -16,6 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/sysctl.h>
+#include <dirent.h>
 
 #if __has_include(<roothide.h>)
 #include <roothide.h>
@@ -34,6 +36,22 @@
 
 static CFStringRef const kLGSafeModeNotification =
     CFSTR("dylv.liquidass/BackboarddSafeMode");
+
+static void lgClearAccessibilityFiles(void) {
+    const char *directoryPath = "/var/mobile/Library/Accessibility";
+    DIR *directory = opendir(directoryPath);
+    if (!directory) return;
+
+    struct dirent *entry = NULL;
+    while ((entry = readdir(directory))) {
+        if (strncmp(entry->d_name, "liquidass", 9) != 0 &&
+            strncmp(entry->d_name, "liquidglass", 11) != 0) continue;
+        char path[PATH_MAX] = {};
+        snprintf(path, sizeof(path), "%s/%s", directoryPath, entry->d_name);
+        unlink(path);
+    }
+    closedir(directory);
+}
 
 typedef struct {
     uint32_t magic;
@@ -291,6 +309,7 @@ typedef struct {
     float       useGlyphMask;
     float       dispersionStrength;
     float       fresnelGlareStrength;
+    float       borderWidthPixels;
     simd_float4 tintColor;
 } LGUniforms;
 
@@ -339,6 +358,7 @@ static void   *g_customCtx    = nullptr; // mmapped filtersubclass-shaped block
 typedef void (*MSHookFunctionFn)(void *, void *, void **);
 static MSHookFunctionFn g_hookFunction = nullptr;
 static bool             g_useHookPath = false;
+static bool             g_gaussianHooksInstalled = false;
 static bool             g_legacyRenderABI = false;
 static bool             g_skipGaussianIdentityHook = false;
 static bool             g_skipGaussianEdgeHook = false;
@@ -362,8 +382,6 @@ static const char *kForceHookPath =
 static id<MTLLibrary>              g_shaderLibrary = nil;
 static id<MTLBuffer>               g_uniformsBuf  = nil;
 static std::unordered_map<NSUInteger, id<MTLRenderPipelineState>> *g_renderPipelines = nullptr;
-static id<MTLComputePipelineState> g_blurPipeline = nil;
-static NSMutableDictionary<NSString *, NSArray<id<MTLTexture>> *> *g_blurTextures = nil;
 static id<MTLTexture>              g_clockMaskTexture = nil;
 static NSData                     *g_clockMaskData = nil;
 static uint32_t                    g_clockMaskWidth = 0;
@@ -410,8 +428,6 @@ __attribute__((destructor))
 static void liquidGlassShutdown(void) {
     g_shaderLibrary = nil;
     g_uniformsBuf  = nil;
-    g_blurPipeline = nil;
-    g_blurTextures = nil;
     g_clockMaskTexture = nil;
     g_clockMaskData = nil;
     if (g_clockSharedMaskMapping != MAP_FAILED) {
@@ -449,34 +465,9 @@ struct Uniforms {
     float  useGlyphMask;
     float  dispersionStrength;
     float  fresnelGlareStrength;
+    float  borderWidthPixels;
     float4 tintColor;
 };
-
-kernel void lgGaussianBlur(texture2d<float, access::sample> source [[texture(0)]],
-                           texture2d<float, access::write> destination [[texture(1)]],
-                           constant float2 &direction [[buffer(0)]],
-                           constant float &sigmaValue [[buffer(1)]],
-                           uint2 gid [[thread_position_in_grid]]) {
-    uint width = destination.get_width();
-    uint height = destination.get_height();
-    if (gid.x >= width || gid.y >= height) return;
-
-    constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
-    float sigma = max(sigmaValue, 0.5);
-    int sampleRadius = min(24, int(ceil(sigma * 3.0)));
-    float2 textureSize = float2(source.get_width(), source.get_height());
-    float2 center = (float2(gid) + 0.5) / float2(width, height);
-    float4 sum = float4(0.0);
-    float totalWeight = 0.0;
-    for (int offset = -sampleRadius; offset <= sampleRadius; offset++) {
-        float sampleOffset = float(offset);
-        float weight = exp(-(sampleOffset * sampleOffset) / (2.0 * sigma * sigma));
-        float2 uv = center + direction * (sampleOffset / textureSize);
-        sum += source.sample(linearSampler, uv) * weight;
-        totalWeight += weight;
-    }
-    destination.write(sum / max(totalWeight, 0.0001), gid);
-}
 
 float quartzGlassEdgeProfile(float distanceFromEdge,
                              float refractionHeight) {
@@ -741,7 +732,7 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
             cornerBlend = saturate(min(q.x, q.y) /
                                    max(min(extent.x, extent.y), 0.001));
         }
-        if (signedDistance > 1.0) {
+        if (signedDistance > (subShape ? 0.0 : 1.0)) {
             return subShape ? float4(0.0) : src.sample(s, captureUV);
         }
 
@@ -777,7 +768,8 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
             dir = float2((dL < dR && dL == dm) ? -1.0 : (dR <= dL && dR == dm) ?  1.0 : 0.0,
                          (dT < dB && dT == dm) ? -1.0 : (dB <= dT && dB == dm) ?  1.0 : 0.0);
         }
-        edgeOpacity = clamp(1.0 - max(0.0, signedDistance), 0.0, 1.0);
+        edgeOpacity = subShape ? 1.0
+                               : clamp(1.0 - max(0.0, signedDistance), 0.0, 1.0);
     }
 
     if (u.useGlyphMask < 0.5 && !isCoverSheet && !isKeyboard &&
@@ -887,6 +879,8 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
     highlight *= mix(0.32, 1.0, luminance);
     highlight = min(highlight, 0.22);
     outRGB = 1.0 - (1.0 - outRGB) * (1.0 - highlight);
+    if (subShape && distFromSide <= u.borderWidthPixels)
+        outRGB = 1.0 - (1.0 - outRGB) * 0.82;
     return float4(outRGB, edgeOpacity);
 }
 
@@ -972,107 +966,6 @@ renderPipelineForFormat(__unsafe_unretained id<MTLDevice> device, MTLPixelFormat
     }
     os_unfair_lock_unlock(&g_pipelineLock);
     return pipeline;
-}
-
-static id<MTLComputePipelineState>
-blurPipelineForDevice(__unsafe_unretained id<MTLDevice> device) {
-    ensurePipeline(device);
-    if (!g_shaderLibrary) return nil;
-
-    os_unfair_lock_lock(&g_pipelineLock);
-    if (!g_blurPipeline) {
-        id<MTLFunction> function = [g_shaderLibrary newFunctionWithName:@"lgGaussianBlur"];
-        NSError *error = nil;
-        g_blurPipeline = [device newComputePipelineStateWithFunction:function error:&error];
-        if (!g_blurPipeline) {
-            lglog("blur pipeline failed: %s", error.localizedDescription.UTF8String);
-        } else {
-            lglog("owned gaussian blur pipeline ready");
-        }
-    }
-    id<MTLComputePipelineState> pipeline = g_blurPipeline;
-    os_unfair_lock_unlock(&g_pipelineLock);
-    return pipeline;
-}
-
-static NSArray<id<MTLTexture>> *
-blurTexturesForSource(__unsafe_unretained id<MTLTexture> source) {
-    if (!source || !g_blurTextures) return nil;
-    NSString *key = [NSString stringWithFormat:@"%p:%lu:%lu:%lu",
-                     source.device, (unsigned long)source.pixelFormat,
-                     (unsigned long)source.width, (unsigned long)source.height];
-
-    os_unfair_lock_lock(&g_pipelineLock);
-    NSArray<id<MTLTexture>> *textures = g_blurTextures[key];
-    if (!textures) {
-        MTLTextureDescriptor *descriptor =
-            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:source.pixelFormat
-                                                              width:source.width
-                                                             height:source.height
-                                                          mipmapped:NO];
-        descriptor.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
-        descriptor.storageMode = MTLStorageModePrivate;
-        id<MTLTexture> horizontal = [source.device newTextureWithDescriptor:descriptor];
-        id<MTLTexture> vertical = [source.device newTextureWithDescriptor:descriptor];
-        if (horizontal && vertical) {
-            textures = @[horizontal, vertical];
-            g_blurTextures[key] = textures;
-        }
-    }
-    os_unfair_lock_unlock(&g_pipelineLock);
-    return textures;
-}
-
-static id<MTLTexture>
-encodeOwnedGaussianBlur(__unsafe_unretained id<MTLCommandBuffer> commandBuffer,
-                        __unsafe_unretained id<MTLTexture> source,
-                        float radius) {
-    if (g_osMajorVersion == 15) return source;
-    if (!commandBuffer || !source || radius <= 0.001f) return source;
-    id<MTLComputePipelineState> pipeline = blurPipelineForDevice(source.device);
-    NSArray<id<MTLTexture>> *textures = blurTexturesForSource(source);
-    if (!pipeline || textures.count != 2) return source;
-    if (source.width == 0 || source.height == 0) return source;
-
-    float sigma = fmaxf(0.5f, radius);
-    simd_float2 directions[2] = {
-        simd_make_float2(1.0f, 0.0f),
-        simd_make_float2(0.0f, 1.0f),
-    };
-    id<MTLTexture> passSource = source;
-
-    NSUInteger maxThreads = MAX((NSUInteger)1, pipeline.maxTotalThreadsPerThreadgroup);
-    NSUInteger threadWidth = MAX((NSUInteger)1, pipeline.threadExecutionWidth);
-    if (threadWidth > maxThreads) threadWidth = maxThreads;
-    NSUInteger threadHeight = MAX((NSUInteger)1, maxThreads / threadWidth);
-    MTLSize threadsPerGroup = MTLSizeMake(threadWidth, threadHeight, 1);
-    MTLSize groups = MTLSizeMake((source.width  + threadWidth  - 1) / threadWidth,
-                                 (source.height + threadHeight - 1) / threadHeight,
-                                 1);
-    if (groups.width == 0 || groups.height == 0) return source;
-
-    static bool sBlurEncodingFailed = false;
-    if (sBlurEncodingFailed) return source;
-    @try {
-        for (NSUInteger pass = 0; pass < 2; pass++) {
-            id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
-            if (!encoder) return source;
-            [encoder setComputePipelineState:pipeline];
-            [encoder setTexture:passSource atIndex:0];
-            [encoder setTexture:textures[pass] atIndex:1];
-            [encoder setBytes:&directions[pass] length:sizeof(simd_float2) atIndex:0];
-            [encoder setBytes:&sigma length:sizeof(float) atIndex:1];
-            [encoder dispatchThreadgroups:groups threadsPerThreadgroup:threadsPerGroup];
-            [encoder endEncoding];
-            passSource = textures[pass];
-        }
-    } @catch (NSException *exception) {
-        sBlurEncodingFailed = true;
-        lglog("gaussian blur encode threw (%s: %s) - disabling owned blur",
-              exception.name.UTF8String, exception.reason.UTF8String);
-        return source;
-    }
-    return passSource;
 }
 
 static bool lgEnsureClockSharedMaskMapping(void) {
@@ -1190,8 +1083,6 @@ lgClockMaskTexture(__unsafe_unretained id<MTLDevice> device) {
 // radius and bezel scale from the shortest surface side
 
 static const float kCornerRadiusRatio = 28.0f / 220.0f;
-static const float kBezelWidthRatio   = kCornerRadiusRatio * 1.8f;
-
 static const float kMaxBezelPx        = 34.0f;
 
 static void ensureUniforms(__unsafe_unretained id<MTLDevice> device, uint64_t w, uint64_t h) {
@@ -1221,6 +1112,7 @@ static void ensureUniforms(__unsafe_unretained id<MTLDevice> device, uint64_t w,
     u->useGlyphMask            = 0.f;
     u->dispersionStrength      = 5.0f;
     u->fresnelGlareStrength    = 0.5f;
+    u->borderWidthPixels       = 2.0f;
     lglog("uniforms buffer allocated (geometry refreshed per-frame)");
 }
 
@@ -1236,7 +1128,7 @@ static void updateUniformsForFrame(uint64_t w, uint64_t h) {
     u->wallpaperResolution = simd_make_float2(fw, fh);
     u->lensOrigin          = simd_make_float2(0.f, 0.f);
     u->radius              = kCornerRadiusRatio * shortest;
-    u->bezelWidth           = fminf(kBezelWidthRatio * shortest, kMaxBezelPx);
+    u->bezelWidth           = kMaxBezelPx;
 }
 
 typedef struct {
@@ -1244,11 +1136,10 @@ typedef struct {
     const char *prefPrefix;
     uint32_t    atom;
     float       radiusRatio;
-    float       bezelRatio;
+    float       bezelWidthPoints;
     float       glassThickness;
     float       refractionScale;
     float       refractiveIndex;
-    float       blur;
     float       dispersionStrength;
     float       tintR, tintG, tintB, tintStrength;
     float       darkTintR, darkTintG, darkTintB, darkTintStrength;
@@ -1256,7 +1147,7 @@ typedef struct {
 
 static const LGHostParams kHostDefaults[] = {
 #define LG_BACKBOARDD_HOST(identifier, type, prefix, radius, bezel, thickness, refraction, index, blurValue, specular, dispersion, lightTint, darkTint) \
-    { type, prefix, 0, radius, bezel, thickness, refraction, index, blurValue, dispersion },
+    { type, prefix, 0, radius, bezel, thickness, refraction, index, dispersion },
     LG_HOST_REGISTRY(LG_BACKBOARDD_HOST)
 #undef LG_BACKBOARDD_HOST
 };
@@ -1266,7 +1157,6 @@ static LGHostParams g_hostParams[kHostCount];
 static uint32_t g_darkAtoms[kHostCount];
 static bool         g_hostParamsInit = false;
 static float        g_fresnelGlareStrength = 0.5f;
-static bool         g_coverSheetBezelRatioOverride = false;
 static float        g_coverSheetCornerRadiusPoints = 64.0f;
 
 struct LGRadiusRoute { int host; float radiusRatio; bool dark; };
@@ -1350,7 +1240,6 @@ static void lgReloadHostPrefs(void) {
     NSNumber *fresnelStrength = prefs[@"Renderer.FresnelGlareStrength"];
     g_fresnelGlareStrength = [fresnelStrength isKindOfClass:NSNumber.class]
         ? fminf(1.0f, fmaxf(0.0f, fresnelStrength.floatValue)) : 0.5f;
-    g_coverSheetBezelRatioOverride = false;
     g_coverSheetCornerRadiusPoints = 64.0f;
     NSNumber *coverSheetCornerRadius = prefs[@"CoverSheet.CornerRadius"];
     if ([coverSheetCornerRadius isKindOfClass:[NSNumber class]]) {
@@ -1367,20 +1256,15 @@ static void lgReloadHostPrefs(void) {
         if (!prefs) continue;
         NSString *p = [NSString stringWithUTF8String:kHostDefaults[i].prefPrefix];
         NSNumber *v;
-        if (i == LGHostIdentifierCoverSheet) {
-            id storedBezelRatio = prefs[[p stringByAppendingString:@".BezelRatio"]];
-            g_coverSheetBezelRatioOverride = [storedBezelRatio isKindOfClass:[NSNumber class]];
-        }
         #define LG_OVR(field, key) \
             if ((v = prefs[[p stringByAppendingString:@"." key]]) && \
                 [v isKindOfClass:[NSNumber class]]) { g_hostParams[i].field = v.floatValue; overrides++; }
 
-        LG_OVR(bezelRatio,      @"BezelRatio");
+        LG_OVR(bezelWidthPoints,  @"BezelWidth");
         LG_OVR(glassThickness,     @"GlassThickness");
         LG_OVR(refractionScale,    @"RefractionScale");
         LG_OVR(refractiveIndex,    @"RefractiveIndex");
         LG_OVR(dispersionStrength, @"DispersionStrength");
-        LG_OVR(blur,               @"Blur");
         LG_OVR(tintR,           @"TintR");
         LG_OVR(tintG,           @"TintG");
         LG_OVR(tintB,           @"TintB");
@@ -1408,7 +1292,7 @@ static void lgReloadHostPrefs(void) {
 
     lglog("lgReloadHostPrefs: %s (%d hosts, %d overrides) banner.bezel=%.3f refr=%.2f",
           prefs ? "loaded prefs" : "defaults", kHostCount, overrides,
-          g_hostParams[4].bezelRatio, g_hostParams[4].refractionScale);
+          g_hostParams[4].bezelWidthPoints, g_hostParams[4].refractionScale);
 }
 
 static void lgPrefsReloadCallback(CFNotificationCenterRef c, void *o, CFStringRef n,
@@ -1489,9 +1373,10 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
     float radiusRatio = radiusIt != g_radiusRoutes.end()
         ? radiusIt->second.radiusRatio : hp->radiusRatio;
     lu.radius          = radiusRatio * shortestF;
-    float maxBezel = !strcmp(hp->prefPrefix, "CoverSheet")
-        ? shortestF * 0.5f : kMaxBezelPx;
-    lu.bezelWidth      = fminf(hp->bezelRatio * shortestF, maxBezel);
+    float pixelsPerPoint = fmaxf(0.1f, scale * 2.0f);
+    lu.borderWidthPixels = pixelsPerPoint;
+    lu.bezelWidth      = fminf(hp->bezelWidthPoints * pixelsPerPoint,
+                               shortestF * 0.5f);
     lu.glassThickness     = hp->glassThickness;
     lu.refractionScale    = hp->refractionScale;
     lu.refractiveIndex    = hp->refractiveIndex;
@@ -1508,11 +1393,11 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
             bool routedRadius = radiusIt != g_radiusRoutes.end();
             lglog("keyboard-geometry[%d] atom=0x%x tex=%llux%llu dark=%d "
                   "route=%d routeHost=%d hostRatio=%.6f selectedRatio=%.6f "
-                  "radius=%.3f bezelRatio=%.6f bezel=%.3f",
+                  "radius=%.3f bezelWidth=%.3fpt bezel=%.3f",
                   logIndex, ftype, w, h, darkTint, routedRadius,
                   routedRadius ? radiusIt->second.host : -1,
                   hp->radiusRatio, radiusRatio, lu.radius,
-                  hp->bezelRatio, lu.bezelWidth);
+                  hp->bezelWidthPoints, lu.bezelWidth);
         }
     }
 
@@ -1521,7 +1406,7 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
     if (!strcmp(hp->prefPrefix, "TabBarSelection")) {
         LGLensRectSlot lens = {};
         if (LGLensRectRead(LGLensRectSlotTabBarSelection, &lens)) {
-            lu.backdropZoom = 0.85f;
+            lu.backdropZoom = 0.80f;
             lu.shapeScale   = 1.0f;
             lu.shapeOrigin  = simd_make_float2(lens.originXRatio * (float)w,
                                                lens.originYRatio * (float)h);
@@ -1529,7 +1414,8 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
                                                lens.heightRatio * (float)h);
             float shapeShortest = fminf(lu.shapeSize.x, lu.shapeSize.y);
             lu.radius = radiusRatio * shapeShortest;
-            lu.bezelWidth = fminf(hp->bezelRatio * shapeShortest, kMaxBezelPx);
+            lu.bezelWidth = fminf(hp->bezelWidthPoints * pixelsPerPoint,
+                                  shapeShortest * 0.5f);
         }
     }
 
@@ -1544,12 +1430,14 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
                                               lens.heightRatio * (float)h);
             float shapeShortest = fminf(lu.shapeSize.x, lu.shapeSize.y);
             lu.radius = radiusRatio * shapeShortest;
-            lu.bezelWidth = fminf(hp->bezelRatio * shapeShortest, kMaxBezelPx);
+            lu.bezelWidth = fminf(hp->bezelWidthPoints * pixelsPerPoint,
+                                  shapeShortest * 0.5f);
         } else {
             lu.shapeScale = 0.75f;
             float shapeShortest = shortestF * lu.shapeScale;
             lu.radius = radiusRatio * shapeShortest;
-            lu.bezelWidth = fminf(hp->bezelRatio * shapeShortest, kMaxBezelPx);
+            lu.bezelWidth = fminf(hp->bezelWidthPoints * pixelsPerPoint,
+                                  shapeShortest * 0.5f);
         }
 
     }
@@ -1600,18 +1488,14 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
                 lu.radius = coverSheetCornerRadiusPoints * pixelsPerPoint;
             }
         }
-        if (!g_coverSheetBezelRatioOverride && coverStateValid &&
-            state.pixelsPerPoint >= 1.0f && state.pixelsPerPoint <= 4.0f && w > 0) {
-            float screenWidthPoints = (float)w / state.pixelsPerPoint;
-            float cornerRadiusPoints = lu.radius / state.pixelsPerPoint;
-            float dynamicBezelRatio = screenWidthPoints > 0.0f
-                ? cornerRadiusPoints / screenWidthPoints : 0.0f;
-            lu.bezelWidth = fminf(dynamicBezelRatio * (float)w, maxBezel);
+        if (coverStateValid && state.pixelsPerPoint >= 1.0f &&
+            state.pixelsPerPoint <= 4.0f) {
+            lu.bezelWidth = fminf(hp->bezelWidthPoints * state.pixelsPerPoint,
+                                  shortestF * 0.5f);
             static int sCoverBezelLogs = 0;
             if (__sync_fetch_and_add(&sCoverBezelLogs, 1) < 12) {
-                lglog("coversheet-bezel default radius=%.2fpt screenWidth=%.2fpt ratio=%.5f px=%.2f",
-                      cornerRadiusPoints, screenWidthPoints, dynamicBezelRatio,
-                      lu.bezelWidth);
+                lglog("coversheet-bezel width=%.2fpt ppp=%.2f px=%.2f",
+                      hp->bezelWidthPoints, state.pixelsPerPoint, lu.bezelWidth);
             }
         }
         static uint32_t sLastCoverOrientation = UINT32_MAX;
@@ -1711,8 +1595,7 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
         return;
     }
 
-    id<MTLTexture> glassSourceTexture =
-        encodeOwnedGaussianBlur(cmdBuf, origTex, hp->blur);
+    id<MTLTexture> glassSourceTexture = origTex;
 
     id<MTLRenderPipelineState> renderPipeline =
         renderPipelineForFormat(device, destTex.pixelFormat);
@@ -2023,14 +1906,6 @@ static bool registerCustomFilter(void) {
         lglog("registerCustomFilter: could not resolve filter_table, aborting (no fallback)");
         return false;
     }
-    if (!*filterTableSlot) {
-        lglog("registerCustomFilter: filter_table null, retrying in 250ms");
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC),
-                       dispatch_get_global_queue(QOS_CLASS_UTILITY, 0),
-                       ^{ registerCustomFilter(); });
-        return false;
-    }
-
     if (g_filterRegistered) return true; // idempotent
 
     void **gaussCtxSlot = (void **)LGResolve_GaussianCtxSlot();
@@ -2079,6 +1954,25 @@ static bool registerCustomFilter(void) {
         return false;
     }
 
+    if (g_useHookPath && !g_gaussianHooksInstalled) {
+        if (!lgInstallGaussianHooks(gaussVtable[0],
+                                    gaussVtable[edgeInfoSlot],
+                                    gaussVtable[renderSlot])) {
+            lglog("registerCustomFilter: Gaussian hooks install failed");
+            return false;
+        }
+        g_gaussianHooksInstalled = true;
+        lglog("registerCustomFilter: Gaussian hooks installed before filter registration");
+    }
+
+    if (!*filterTableSlot) {
+        lglog("registerCustomFilter: filter_table null, retrying in 250ms");
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC),
+                       dispatch_get_global_queue(QOS_CLASS_UTILITY, 0),
+                       ^{ registerCustomFilter(); });
+        return false;
+    }
+
     if (!g_internAtom || !g_addFilter) {
         lglog("registerCustomFilter: internAtom=%p addFilter=%p, aborting",
               (void *)g_internAtom, (void *)g_addFilter);
@@ -2092,11 +1986,8 @@ static bool registerCustomFilter(void) {
 
     void *registrationDescriptor = nullptr;
     if (g_useHookPath) {
-
-        if (!lgInstallGaussianHooks(gaussVtable[0],
-                                    gaussVtable[edgeInfoSlot],
-                                    gaussVtable[renderSlot])) {
-            lglog("registerCustomFilter: Gaussian hooks install failed");
+        if (!g_gaussianHooksInstalled) {
+            lglog("registerCustomFilter: Gaussian hooks unexpectedly missing");
             return false;
         }
         registrationDescriptor = gaussCtxSlot;
@@ -2221,6 +2112,7 @@ static bool registerCustomFilter(void) {
 __attribute__((constructor))
 static void tweakInit(void) {
     @autoreleasepool {
+    lgClearAccessibilityFiles();
     if (lgShouldEnterSafeMode()) return;
     {
         NSDictionary *bootPrefs =
@@ -2292,7 +2184,6 @@ static void tweakInit(void) {
 
     g_renderPipelines =
         new std::unordered_map<NSUInteger, id<MTLRenderPipelineState>>();
-    g_blurTextures = [NSMutableDictionary dictionary];
     registerCustomFilter();
 
     lglog("ready");

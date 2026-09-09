@@ -49,12 +49,12 @@ static const void *kLGKeyboardVisualEffectSuppressingHiddenKey =
     &kLGKeyboardVisualEffectSuppressingHiddenKey;
 static const void *kLGKeyboardVisualEffectRequestedHiddenKey =
     &kLGKeyboardVisualEffectRequestedHiddenKey;
-static const void *kLGKeyboardMaskKey = &kLGKeyboardMaskKey;
 static const void *kLGKeyboardBorderKey = &kLGKeyboardBorderKey;
 static NSHashTable<UIView *> *gLGKeyboardBackdrops;
 static NSHashTable<UIView *> *gLGKeyboardVisualEffects;
 static NSUInteger gLGKeyboardBackdropLogCount;
 static BOOL gLGKeyboardKeyplaneRefreshScheduled;
+static const CGFloat kLGKeyboardBottomGlassExtra = 50.0;
 
 static CGFloat LGKeyboardCornerRadius(void) {
     return fmin(60.0, fmax(0.0,
@@ -309,8 +309,6 @@ static CGRect LGKeyboardMergedBackdropFrame(NSArray<UIView *> *backdrops,
                                             UIView *container) {
     CGRect frame = CGRectNull;
     for (UIView *backdrop in backdrops) {
-        if (CGRectGetWidth(backdrop.bounds) <= 1.0 ||
-            CGRectGetHeight(backdrop.bounds) <= 1.0) continue;
         CGRect converted = [backdrop.superview convertRect:backdrop.frame
                                                     toView:container];
         frame = CGRectIsNull(frame) ? converted : CGRectUnion(frame, converted);
@@ -329,12 +327,6 @@ static NSString *LGKeyboardBackdropSummary(NSArray<UIView *> *backdrops) {
 }
 
 static void LGUpdateKeyboardBorder(LGLiveBackdropView *glass) {
-    CAShapeLayer *mask = objc_getAssociatedObject(glass, kLGKeyboardMaskKey);
-    if (!mask) {
-        mask = [CAShapeLayer layer];
-        objc_setAssociatedObject(glass, kLGKeyboardMaskKey, mask,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
     CAShapeLayer *border = objc_getAssociatedObject(glass, kLGKeyboardBorderKey);
     if (!border) {
         border = [CAShapeLayer layer];
@@ -349,38 +341,15 @@ static void LGUpdateKeyboardBorder(LGLiveBackdropView *glass) {
     CGFloat lineWidth = 1.0 / MAX(scale, 1.0);
     CGRect borderRect = CGRectInset(glass.bounds, lineWidth * 0.5,
                                     lineWidth * 0.5);
-    CGFloat radius = MAX(0.0, LGKeyboardCornerRadius() - lineWidth * 0.5);
-    UIBezierPath *maskPath = [UIBezierPath
-        bezierPathWithRoundedRect:glass.bounds
-               byRoundingCorners:UIRectCornerTopLeft | UIRectCornerTopRight
-                     cornerRadii:CGSizeMake(radius, radius)];
-    UIBezierPath *borderPath = [UIBezierPath bezierPath];
-    [borderPath moveToPoint:CGPointMake(CGRectGetMinX(borderRect),
-                                            CGRectGetMaxY(borderRect))];
-    [borderPath addLineToPoint:CGPointMake(CGRectGetMinX(borderRect),
-                                               CGRectGetMinY(borderRect) + radius)];
-    [borderPath addArcWithCenter:CGPointMake(CGRectGetMinX(borderRect) + radius,
-                                                  CGRectGetMinY(borderRect) + radius)
-                             radius:radius startAngle:M_PI endAngle:M_PI * 1.5
-                          clockwise:YES];
-    [borderPath addLineToPoint:CGPointMake(CGRectGetMaxX(borderRect) - radius,
-                                               CGRectGetMinY(borderRect))];
-    [borderPath addArcWithCenter:CGPointMake(CGRectGetMaxX(borderRect) - radius,
-                                                  CGRectGetMinY(borderRect) + radius)
-                             radius:radius startAngle:M_PI * 1.5 endAngle:0.0
-                          clockwise:YES];
-    [borderPath addLineToPoint:CGPointMake(CGRectGetMaxX(borderRect),
-                                               CGRectGetMaxY(borderRect))];
+    CGFloat radius = MAX(0.0, glass.layer.cornerRadius - lineWidth * 0.5);
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    mask.frame = glass.bounds;
-    mask.path = maskPath.CGPath;
     border.frame = glass.bounds;
     border.contentsScale = scale;
     border.lineWidth = lineWidth;
-    border.path = borderPath.CGPath;
+    border.path = [UIBezierPath bezierPathWithRoundedRect:borderRect
+                                              cornerRadius:radius].CGPath;
     [CATransaction commit];
-    glass.layer.mask = mask;
 }
 
 static void LGUpdateKeyboardGlass(UIView *stock) {
@@ -440,6 +409,7 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
             (hasPredictionStrip ? 0.0 : LGKeyboardTopOverhang()) -
             CGRectGetHeight(primary.bounds);
     }
+    mergedFrame.size.height += kLGKeyboardBottomGlassExtra;
     if (!hasPredictionStrip) {
         container.clipsToBounds = NO;
         container.layer.masksToBounds = NO;
@@ -471,8 +441,8 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
     }
 
     glass.frame = mergedFrame;
-    glass.layer.cornerRadius = 0.0;
-    glass.layer.masksToBounds = NO;
+    glass.layer.cornerRadius = LGKeyboardCornerRadius();
+    glass.layer.masksToBounds = YES;
     glass.lgShapeCornerRadius = LGKeyboardCornerRadius();
     glass.lgShapeRect = glass.bounds;
     if (@available(iOS 13.0, *)) {

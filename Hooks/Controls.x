@@ -183,6 +183,10 @@ static void LGRecordControlsDiagnostic(LGControlsDiagnosticKind kind,
     Class backdrop = NSClassFromString(@"CABackdropLayer");
     if (!backdrop || ![self.layer isKindOfClass:backdrop]) return;
     @try {
+        if (_lgBlurRadius <= 0.0) {
+            self.layer.filters = nil;
+            return;
+        }
         [self.layer setValue:@NO forKey:@"layerUsesCoreImageFilters"];
         [self.layer setValue:@YES forKey:@"windowServerAware"];
         if (![self.layer valueForKey:@"groupName"])
@@ -233,8 +237,16 @@ static UIColor *LGSidebarTintBaseColor(void) {
     return base ?: UIColor.whiteColor;
 }
 
+static UIColor *LGDetailTintBaseColor(void) {
+    SEL selector = NSSelectorFromString(@"groupTableViewBackgroundColor");
+    if ([UIColor respondsToSelector:selector])
+        return ((UIColor *(*)(Class, SEL))objc_msgSend)(UIColor.class, selector);
+    if (@available(iOS 13.0, *)) return UIColor.systemGroupedBackgroundColor;
+    return UIColor.whiteColor;
+}
+
 @interface LGSettingsTopFadeView : UIView
-@property (nonatomic) BOOL lgTintEnabled;
+@property (nonatomic) BOOL lgDetailTint;
 @end
 
 @implementation LGSettingsTopFadeView {
@@ -269,21 +281,20 @@ static UIColor *LGSidebarTintBaseColor(void) {
     _tint.startPoint = _mask.startPoint;
     _tint.endPoint = _mask.endPoint;
     _tint.locations = LGFadeRampLocations();
-    _tint.hidden = YES;
     [self.layer addSublayer:_tint];
+    [self lg_updateTint];
     return self;
 }
 
-- (void)setLgTintEnabled:(BOOL)enabled {
-    if (_lgTintEnabled == enabled) return;
-    _lgTintEnabled = enabled;
-    _tint.hidden = !enabled;
+- (void)setLgDetailTint:(BOOL)detailTint {
+    if (_lgDetailTint == detailTint) return;
+    _lgDetailTint = detailTint;
     [self lg_updateTint];
 }
 
 - (void)lg_updateTint {
-    if (!_lgTintEnabled) return;
-    UIColor *tint = LGSidebarTintBaseColor();
+    UIColor *tint = _lgDetailTint ? LGDetailTintBaseColor()
+                                  : LGSidebarTintBaseColor();
     if (@available(iOS 13.0, *))
         tint = [tint resolvedColorWithTraitCollection:self.traitCollection];
     NSMutableArray *colors = [NSMutableArray array];
@@ -434,8 +445,7 @@ static BOOL LGGlobalControlPreferenceEnabled(NSString *key, BOOL fallback) {
 
 static BOOL LGProcessIsExcludedFromGlobalControls(void) {
     id stored = LGGlassPreferenceValue(@"GlobalControls.Exclusions");
-    NSString *exclusions = [stored isKindOfClass:NSString.class]
-        ? (NSString *)stored : @"NewTerm\nFilza\nTikTok\nDiscord\ncom.spotify.client";
+    id exclusions = stored ?: @"NewTerm\nFilza\nTikTok\nDiscord\ncom.spotify.client";
     return LGProcessMatchesExclusionList(exclusions);
 }
 
@@ -559,7 +569,7 @@ static void LGUpdateSettingsTopFade(UIView *wrapper) {
     fade.frame = CGRectMake(0.0, 0.0, CGRectGetWidth(wrapper.bounds), height);
     fade.autoresizingMask = UIViewAutoresizingFlexibleWidth |
                             UIViewAutoresizingFlexibleBottomMargin;
-    fade.lgTintEnabled = LGViewIsInsideSidebar(wrapper);
+    fade.lgDetailTint = !LGViewIsInsideSidebar(wrapper);
     [wrapper bringSubviewToFront:fade];
 }
 

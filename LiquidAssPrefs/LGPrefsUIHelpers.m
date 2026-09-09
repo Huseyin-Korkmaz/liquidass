@@ -2,6 +2,9 @@
 #import "LGPrefsDataSupport.h"
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGSharedSupport.h"
+#import "../Shared/LGFramework.h"
+#import <AltList/ATLApplicationListMultiSelectionController.h>
+#import <Preferences/PSSpecifier.h>
 #import <notify.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -421,7 +424,14 @@ UIView *LGMakeSectionDivider(void) {
 }
 
 UIBarButtonItem *LGMakeCircularBackItem(id target, SEL action) {
-    LGLiveGlassBarButton *button = [[LGLiveGlassBarButton alloc] initWithTarget:target action:action symbolName:@"chevron.left"];
+    LGButtonView *button = [[LGButtonView alloc] initWithFrame:CGRectMake(0.0, 0.0, 44.0, 44.0)
+                                                    symbolName:@"chevron.left"
+                                                    blurRadius:2.0];
+    button.clipsToBounds = NO;
+    button.layer.masksToBounds = NO;
+    [button addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
+    [button.widthAnchor constraintEqualToConstant:44.0].active = YES;
+    [button.heightAnchor constraintEqualToConstant:44.0].active = YES;
     return [[UIBarButtonItem alloc] initWithCustomView:button];
 }
 
@@ -448,18 +458,23 @@ UIBarButtonItem *LGMakeCircularMenuItem(id target, SEL applyAction, SEL resetAct
         }
     }];
     UIMenu *menu = [UIMenu menuWithTitle:@"" children:@[ apply, reset ]];
-    LGLiveGlassBarButton *button = [[LGLiveGlassBarButton alloc]
-        initWithTarget:nil action:nil symbolName:@"line.3.horizontal"];
+    LGButtonView *button = [[LGButtonView alloc] initWithFrame:CGRectMake(0.0, 0.0, 44.0, 44.0)
+                                                    symbolName:@"line.3.horizontal"
+                                                    blurRadius:2.0];
+    button.clipsToBounds = NO;
+    button.layer.masksToBounds = NO;
     [button setPrimaryMenu:menu];
     button.accessibilityLabel = LGLocalized(@"prefs.button.more");
+    [button.widthAnchor constraintEqualToConstant:44.0].active = YES;
+    [button.heightAnchor constraintEqualToConstant:44.0].active = YES;
     UIBarButtonItem *item = [[UIBarButtonItem alloc] initWithCustomView:button];
     item.accessibilityLabel = button.accessibilityLabel;
     return item;
 }
 
 void LGRefreshCircularBackItem(UIBarButtonItem *item) {
-    if ([item.customView isKindOfClass:[LGLiveGlassBarButton class]]) {
-        [(LGLiveGlassBarButton *)item.customView refreshGlass];
+    if ([item.customView respondsToSelector:@selector(refreshGlass)]) {
+        [(LGButtonView *)item.customView refreshGlass];
     }
 }
 
@@ -1533,41 +1548,41 @@ void LGPresentThirdPartyRWBEditor(UIViewController *controller) {
     });
 }
 
-static void LGPresentExclusionEditor(UIViewController *controller,
-                                     NSString *key,
-                                     NSString *title,
-                                     NSString *body,
-                                     NSString *placeholder,
-                                     NSString *defaults) {
-    id storedValue = LGReadPreferenceObject(key, defaults);
-    NSString *existing = [storedValue isKindOfClass:NSString.class] ? storedValue : defaults;
-    LGPresentMultilineTextInputSheet(controller, title, body, existing, placeholder,
-                                     ^(NSString *text) {
-        NSMutableOrderedSet<NSString *> *entries = [NSMutableOrderedSet orderedSet];
-        NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@"\n,;"];
-        for (NSString *rawEntry in [text componentsSeparatedByCharactersInSet:separators]) {
-            NSString *entry = [rawEntry stringByTrimmingCharactersInSet:
-                NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            if (entry.length) [entries addObject:entry];
-        }
-        LGWritePreferenceObject(key, [entries.array componentsJoinedByString:@"\n"]);
-    });
+static void LGPresentAppList(UIViewController *controller, NSString *key,
+                             NSString *title, NSArray<NSString *> *defaults) {
+    PSSpecifier *specifier = [PSSpecifier preferenceSpecifierNamed:title
+        target:controller
+        set:@selector(setAppExclusions:specifier:)
+        get:@selector(readAppExclusions:)
+        detail:nil
+        cell:PSLinkListCell
+        edit:nil];
+    [specifier setProperty:key forKey:@"key"];
+    [specifier setProperty:defaults forKey:@"default"];
+    [specifier setProperty:@[@{ @"sectionType": @"Visible" }] forKey:@"sections"];
+    [specifier setProperty:@YES forKey:@"useSearchBar"];
+    [specifier setProperty:@YES forKey:@"includeIdentifiersInSearch"];
+    [specifier setProperty:@YES forKey:@"showIdentifiersAsSubtitle"];
+
+    ATLApplicationListMultiSelectionController *list =
+        [ATLApplicationListMultiSelectionController new];
+    [list setSpecifier:specifier];
+    list.title = title;
+    [controller.navigationController pushViewController:list animated:YES];
 }
 
-void LGPresentGlobalControlsExclusionEditor(UIViewController *controller) {
-    LGPresentExclusionEditor(controller, @"GlobalControls.Exclusions",
-                             LGLocalized(@"prefs.global_controls.exclusions.title"),
-                             LGLocalized(@"prefs.global_controls.exclusions.body"),
-                             LGLocalized(@"prefs.global_controls.exclusions.placeholder"),
-                             @"NewTerm\nFilza\nTikTok\nDiscord\ncom.spotify.client");
+void LGPresentGlobalControlsAppList(UIViewController *controller) {
+    LGPresentAppList(controller, @"GlobalControls.Exclusions",
+                     LGLocalized(@"prefs.global_controls.exclusions.title"),
+                     @[@"ws.hbang.Terminal", @"com.tigisoftware.Filza",
+                       @"com.zhiliaoapp.musically", @"com.hammerandchisel.discord",
+                       @"com.spotify.client"]);
 }
 
-void LGPresentTabBarExclusionEditor(UIViewController *controller) {
-    LGPresentExclusionEditor(controller, @"TabBar.Exclusions",
-                             LGLocalized(@"prefs.tab_bar.exclusions.title"),
-                             LGLocalized(@"prefs.tab_bar.exclusions.body"),
-                             LGLocalized(@"prefs.tab_bar.exclusions.placeholder"),
-                             @"TikTok\ncom.zhiliaoapp.musically");
+void LGPresentTabBarAppList(UIViewController *controller) {
+    LGPresentAppList(controller, @"TabBar.Exclusions",
+                     LGLocalized(@"prefs.tab_bar.exclusions.title"),
+                     @[@"com.zhiliaoapp.musically"]);
 }
 
 void LGPresentPreferencesExport(UIViewController *controller) {

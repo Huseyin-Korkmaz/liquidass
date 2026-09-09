@@ -77,5 +77,5 @@ void LGPresentPreferencesExport(UIViewController *controller);
 void LGPresentDiagnosticsExport(UIViewController *controller);
 BOOL LGImportPreferencesFromURL(UIViewController *controller, NSURL *url);
 void LGPresentThirdPartyRWBEditor(UIViewController *controller);
-void LGPresentGlobalControlsExclusionEditor(UIViewController *controller);
-void LGPresentTabBarExclusionEditor(UIViewController *controller);
+void LGPresentGlobalControlsAppList(UIViewController *controller);
+void LGPresentTabBarAppList(UIViewController *controller);
