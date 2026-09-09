@@ -469,6 +469,17 @@ static BOOL LGTabBarCanReceiveTouches(UITabBar *bar) {
     return !CGRectIsEmpty(CGRectIntersection(windowFrame, bar.window.bounds));
 }
 
+static BOOL LGIsRTLBar(UITabBar *bar) {
+    if (@available(iOS 9.0, *)) {
+        if (bar && bar.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft)
+            return YES;
+        if ([UIView userInterfaceLayoutDirectionForSemanticContentAttribute:
+                bar ? bar.semanticContentAttribute : UISemanticContentAttributeUnspecified] == UIUserInterfaceLayoutDirectionRightToLeft)
+            return YES;
+    }
+    return [UIApplication sharedApplication].userInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
+}
+
 static NSArray<UIView *> *LGStockTabBarButtons(UITabBar *bar) {
 
     NSMutableArray<UIView *> *buttons = [NSMutableArray array];
@@ -477,11 +488,17 @@ static NSArray<UIView *> *LGStockTabBarButtons(UITabBar *bar) {
     for (UIView *view in bar.subviews) {
         if ([view isKindOfClass:buttonClass]) [buttons addObject:view];
     }
+    const BOOL isRTL = LGIsRTLBar(bar);
     [buttons sortUsingComparator:^NSComparisonResult(UIView *left, UIView *right) {
         CGFloat leftX = left.center.x;
         CGFloat rightX = right.center.x;
-        if (leftX < rightX) return NSOrderedAscending;
-        if (leftX > rightX) return NSOrderedDescending;
+        if (isRTL) {
+            if (leftX > rightX) return NSOrderedAscending;
+            if (leftX < rightX) return NSOrderedDescending;
+        } else {
+            if (leftX < rightX) return NSOrderedAscending;
+            if (leftX > rightX) return NSOrderedDescending;
+        }
         return NSOrderedSame;
     }];
     return buttons;
@@ -1279,8 +1296,10 @@ static BOOL LGTabBarMotionRange(UITabBar *bar, CGFloat *minimum,
     UIView *last = buttons.lastObject;
     CGRect firstFrame = [first.superview convertRect:first.frame toView:bar];
     CGRect lastFrame = [last.superview convertRect:last.frame toView:bar];
-    if (minimum) *minimum = CGRectGetMidX(firstFrame);
-    if (maximum) *maximum = CGRectGetMidX(lastFrame);
+    CGFloat x1 = CGRectGetMidX(firstFrame);
+    CGFloat x2 = CGRectGetMidX(lastFrame);
+    if (minimum) *minimum = MIN(x1, x2);
+    if (maximum) *maximum = MAX(x1, x2);
     return YES;
 }
 
