@@ -165,12 +165,8 @@
 "prefs.surface.global_controls.title" = "Controls";
 "prefs.global_controls.exclusions.title" = "Excluded Apps";
 "prefs.global_controls.exclusions.subtitle" = "Choose apps that should keep their stock controls.";
-"prefs.global_controls.exclusions.body" = "Enter one bundle ID or executable name per line. Changes apply after reopening the affected app.";
-"prefs.global_controls.exclusions.placeholder" = "com.example.app\nExampleExecutable";
 "prefs.tab_bar.exclusions.title" = "Excluded Apps";
 "prefs.tab_bar.exclusions.subtitle" = "Choose apps that should keep their stock tab bar.";
-"prefs.tab_bar.exclusions.body" = "Enter one bundle ID or executable name per line. Changes apply after reopening the affected app.";
-"prefs.tab_bar.exclusions.placeholder" = "com.example.app\nExampleExecutable";
 "prefs.global_controls.section.title" = "Custom Controls";
 "prefs.global_controls.section.subtitle" = "Choose which system controls are replaced across apps.";
 "prefs.global_controls.switches.title" = "Switches";
