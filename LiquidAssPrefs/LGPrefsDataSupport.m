@@ -51,12 +51,32 @@ static NSArray<NSString *> *LGExportablePreferenceKeys(void) {
 
 static NSBundle *LGActiveLocalizationBundle(void) {
     NSString *languageCode = [LGPrefsUIStateDefaults() stringForKey:kLGPrefsLanguageKey];
+    if (!languageCode.length) {
+        for (NSString *pref in [NSLocale preferredLanguages]) {
+            NSString *canon = [NSLocale canonicalLanguageIdentifierFromString:pref] ?: pref;
+            if ([canon hasPrefix:@"he"] || [canon hasPrefix:@"iw"]) {
+                languageCode = @"he";
+                break;
+            }
+        }
+    }
     NSBundle *baseBundle = [NSBundle bundleForClass:[LGPRootListController class]];
     if (!languageCode.length || [languageCode isEqualToString:@"en"]) {
         return baseBundle;
     }
 
     NSString *bundlePath = [baseBundle pathForResource:languageCode ofType:@"lproj"];
+    if (!bundlePath.length && baseBundle.bundlePath.length) {
+        NSString *direct = [baseBundle.bundlePath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.lproj", languageCode]];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:direct]) {
+            bundlePath = direct;
+        } else if ([languageCode isEqualToString:@"he"]) {
+            NSString *iw = [baseBundle.bundlePath stringByAppendingPathComponent:@"iw.lproj"];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:iw]) {
+                bundlePath = iw;
+            }
+        }
+    }
     if (!bundlePath.length) {
         return baseBundle;
     }
@@ -68,6 +88,9 @@ static NSBundle *LGActiveLocalizationBundle(void) {
 static NSString *LGDisplayNameForLanguageCode(NSString *languageCode) {
     if (!languageCode.length) return @"";
     if ([languageCode isEqualToString:@"en"]) return @"English";
+    if ([languageCode isEqualToString:@"he"] || [languageCode isEqualToString:@"iw"]) {
+        return @"עברית (Hebrew)";
+    }
 
     NSLocale *displayLocale = [NSLocale currentLocale];
     NSString *localeIdentifier = [NSLocale canonicalLocaleIdentifierFromString:languageCode];
@@ -88,11 +111,48 @@ static NSArray<NSDictionary *> *LGAvailableLanguageChoices(void) {
     dispatch_once(&onceToken, ^{
         NSBundle *baseBundle = [NSBundle bundleForClass:[LGPRootListController class]];
         NSMutableOrderedSet<NSString *> *codes = [NSMutableOrderedSet orderedSetWithObject:@"en"];
-        for (NSString *path in [baseBundle pathsForResourcesOfType:@"lproj" inDirectory:nil]) {
-            NSString *languageCode = [[path lastPathComponent] stringByDeletingPathExtension];
-            if (languageCode.length && ![languageCode isEqualToString:@"Base"]) {
-                [codes addObject:languageCode];
+
+        // 1. Direct filesystem scan of bundle directory
+        NSString *bundlePath = baseBundle.bundlePath;
+        if (bundlePath.length) {
+            NSArray<NSString *> *items = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:bundlePath error:nil];
+            for (NSString *item in items) {
+                if ([item.pathExtension isEqualToString:@"lproj"]) {
+                    NSString *code = [item stringByDeletingPathExtension];
+                    if (code.length && ![code isEqualToString:@"Base"]) {
+                        if ([code isEqualToString:@"iw"]) code = @"he";
+                        [codes addObject:code];
+                    }
+                }
             }
+        }
+
+        // 2. Official NSBundle localizations property
+        for (NSString *loc in [baseBundle localizations]) {
+            NSString *code = loc;
+            if ([code isEqualToString:@"iw"]) code = @"he";
+            if (code.length && ![code isEqualToString:@"Base"]) {
+                [codes addObject:code];
+            }
+        }
+
+        // 3. Fallback: pathsForResourcesOfType
+        for (NSString *path in [baseBundle pathsForResourcesOfType:@"lproj" inDirectory:nil]) {
+            NSString *code = [[path lastPathComponent] stringByDeletingPathExtension];
+            if ([code isEqualToString:@"iw"]) code = @"he";
+            if (code.length && ![code isEqualToString:@"Base"]) {
+                [codes addObject:code];
+            }
+        }
+
+        // 4. Guaranteed check for Hebrew
+        NSString *hePath = [bundlePath stringByAppendingPathComponent:@"he.lproj"];
+        NSString *iwPath = [bundlePath stringByAppendingPathComponent:@"iw.lproj"];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:hePath] ||
+            [[NSFileManager defaultManager] fileExistsAtPath:iwPath] ||
+            [baseBundle pathForResource:@"Localizable" ofType:@"strings" inDirectory:@"he.lproj"] ||
+            [baseBundle pathForResource:@"Localizable" ofType:@"strings" inDirectory:@"iw.lproj"]) {
+            [codes addObject:@"he"];
         }
 
         NSMutableArray<NSDictionary *> *dynamicChoices = [NSMutableArray arrayWithCapacity:codes.count];
@@ -179,7 +239,14 @@ NSString *LGPrefsAppName(void) {
 
 NSString *LGCurrentPrefsLanguageCode(void) {
     NSString *languageCode = [LGPrefsUIStateDefaults() stringForKey:kLGPrefsLanguageKey];
-    return languageCode.length ? languageCode : @"en";
+    if (languageCode.length) return languageCode;
+    for (NSString *pref in [NSLocale preferredLanguages]) {
+        NSString *code = [NSLocale canonicalLanguageIdentifierFromString:pref] ?: pref;
+        if ([code hasPrefix:@"he"] || [code hasPrefix:@"iw"]) {
+            return @"he";
+        }
+    }
+    return @"en";
 }
 
 void LGSetCurrentPrefsLanguageCode(NSString *languageCode) {

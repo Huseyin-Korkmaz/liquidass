@@ -675,11 +675,19 @@ static CGRect LGSettingsSliderOverlayFrame(UISlider *owner, UIView *container) {
     }
     if (CGRectIsNull(contentFrame) || CGRectIsEmpty(contentFrame))
         contentFrame = [owner convertRect:owner.bounds toView:container];
-    if (!CGRectIsNull(labelFrame) &&
-        CGRectGetMinX(labelFrame) > CGRectGetMinX(contentFrame)) {
-        CGFloat maximumX = CGRectGetMinX(labelFrame) - 6.0;
-        if (maximumX > CGRectGetMinX(contentFrame))
-            contentFrame.size.width = maximumX - CGRectGetMinX(contentFrame);
+    if (!CGRectIsNull(labelFrame)) {
+        if (CGRectGetMinX(labelFrame) > CGRectGetMinX(contentFrame)) {
+            CGFloat maximumX = CGRectGetMinX(labelFrame) - 6.0;
+            if (maximumX > CGRectGetMinX(contentFrame))
+                contentFrame.size.width = maximumX - CGRectGetMinX(contentFrame);
+        } else if (CGRectGetMaxX(labelFrame) < CGRectGetMaxX(contentFrame)) {
+            CGFloat minimumX = CGRectGetMaxX(labelFrame) + 6.0;
+            if (minimumX < CGRectGetMaxX(contentFrame)) {
+                CGFloat rightX = CGRectGetMaxX(contentFrame);
+                contentFrame.origin.x = minimumX;
+                contentFrame.size.width = rightX - minimumX;
+            }
+        }
     }
     return contentFrame;
 }
