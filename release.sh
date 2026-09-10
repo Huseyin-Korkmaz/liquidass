@@ -7,7 +7,7 @@ if [[ "$MODE" == "rootless" || -z "$MODE" ]]; then
 fi
 if [[ "$MODE" == "rootful" || -z "$MODE" ]]; then
     make clean
-    make package -j8 ARCHS="arm64 arm64e" TARGET="$DEVICE_TARGET" FINALPACKAGE=1
+    make package -j8 ARCHS="arm64 arm64e" TARGET="$DEVICE_TARGET" FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=
 fi
 # this only works if you got the roothide theos fork: https://github.com/roothide/theos
 # bash -c "$(curl -fsSL https://raw.githubusercontent.com/roothide/theos/master/bin/install-theos)"

@@ -17,6 +17,8 @@ LiquidAssPrefs_PRIVATE_FRAMEWORKS = Preferences
 LiquidAssPrefs_EXTRA_FRAMEWORKS += AltList
 endif
 ifeq ($(THEOS_PACKAGE_SCHEME),roothide)
+LiquidAssPrefs_CFLAGS += -F$(THEOS)/lib/iphone/rootless
+LiquidAssPrefs_LDFLAGS += -F$(THEOS)/lib/iphone/rootless -Wl,-rpath,@loader_path/../../Frameworks
 LiquidAssPrefs_LIBRARIES += roothide
 endif
 LiquidAssPrefs_RESOURCE_FILES = ../changelogs

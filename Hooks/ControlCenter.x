@@ -613,6 +613,7 @@ static void ccScheduleFullscreenBackdropStyle(UIView *overlayRoot) {
 static void *kCCRoundOriginalRadiusKey = &kCCRoundOriginalRadiusKey;
 static void *kCCRoundOriginalCurveKey = &kCCRoundOriginalCurveKey;
 static void *kCCRoundOriginalMasksKey = &kCCRoundOriginalMasksKey;
+static void *kCCRoundDesiredRadiusKey = &kCCRoundDesiredRadiusKey;
 static NSHashTable<UIView *> *sCCRoundedViews;
 
 static NSHashTable<UIView *> *ccRoundedViews(void) {
@@ -643,6 +644,8 @@ static void ccRestoreRoundState(UIView *view) {
     NSNumber *masks = objc_getAssociatedObject(view, kCCRoundOriginalMasksKey);
     if (!radius || !curve || !masks) return;
 
+    objc_setAssociatedObject(view.layer, kCCRoundDesiredRadiusKey, nil,
+                             OBJC_ASSOCIATION_ASSIGN);
     view.layer.cornerRadius = radius.doubleValue;
     view.layer.cornerCurve = curve == [NSNull null] ? nil : curve;
     view.layer.masksToBounds = masks.boolValue;
@@ -670,6 +673,8 @@ static void lgRound(UIView *v, CGFloat r) {
     }
 
     ccRememberOriginalRoundState(v);
+    objc_setAssociatedObject(v.layer, kCCRoundDesiredRadiusKey, @(r),
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (fabs(v.layer.cornerRadius - r) > 0.5) v.layer.cornerRadius = r;
     v.layer.cornerCurve   = kCACornerCurveContinuous;
     v.layer.masksToBounds = YES;
@@ -813,9 +818,11 @@ static void ccRefreshContentContainerGlassImpl(UIView *container) {
         if (!isExactClass(material, @"MTMaterialView") ||
             !LGMaterialHasGlass(material, kGlassKey)) continue;
         CGFloat radius = ccGlassRadiusForMaterial(material);
-        if (radius >= 0.0)
+        if (radius >= 0.0) {
+            ccApplyOrRestoreRound(material, radius, YES);
             LGInstallRegisteredGlassInMaterial(material, kGlassKey, @"ControlCenter",
                                                UIEdgeInsetsZero, radius, nil);
+        }
     }
 }
 
@@ -936,6 +943,11 @@ static void ccRefreshContentContainerGlass(UIView *container) {
 
 %hook CALayer
 
+- (void)setCornerRadius:(CGFloat)radius {
+    NSNumber *desired = objc_getAssociatedObject(self, kCCRoundDesiredRadiusKey);
+    %orig(desired ? desired.doubleValue : radius);
+}
+
 - (void)setFilters:(NSArray *)filters {
     UIView *overlayRoot = nil;
     CGFloat incomingBlurRadius = -1.0;
@@ -980,6 +992,22 @@ static void ccRefreshContentContainerGlass(UIView *container) {
 - (void)addAnimation:(CAAnimation *)animation forKey:(NSString *)key {
     if (ccObjectHasBlurCap(self) && lgHostEnabled(@"ControlCenter")) {
         ccClampBlurAnimation(animation, ccFullscreenBlurRadius());
+    }
+    NSNumber *desired = objc_getAssociatedObject(self, kCCRoundDesiredRadiusKey);
+    NSString *keyPath = [animation respondsToSelector:@selector(keyPath)]
+        ? [(id)animation keyPath] : nil;
+    if (desired && [keyPath isEqualToString:@"cornerRadius"]) {
+        if ([animation isKindOfClass:CABasicAnimation.class]) {
+            CABasicAnimation *basic = (CABasicAnimation *)animation;
+            basic.fromValue = desired;
+            basic.toValue = desired;
+            basic.byValue = nil;
+        } else if ([animation isKindOfClass:CAKeyframeAnimation.class]) {
+            CAKeyframeAnimation *keyframe = (CAKeyframeAnimation *)animation;
+            NSMutableArray *values = [NSMutableArray arrayWithCapacity:keyframe.values.count];
+            for (__unused id value in keyframe.values) [values addObject:desired];
+            keyframe.values = values;
+        }
     }
     %orig(animation, key);
 }
