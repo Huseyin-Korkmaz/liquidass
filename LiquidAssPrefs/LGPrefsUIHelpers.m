@@ -3,7 +3,9 @@
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGSharedSupport.h"
 #import "../Shared/LGFramework.h"
+#if !TARGET_OS_SIMULATOR
 #import <AltList/ATLApplicationListMultiSelectionController.h>
+#endif
 #import <Preferences/PSSpecifier.h>
 #import <notify.h>
 #import <objc/message.h>
@@ -1550,6 +1552,10 @@ void LGPresentThirdPartyRWBEditor(UIViewController *controller) {
 
 static void LGPresentAppList(UIViewController *controller, NSString *key,
                              NSString *title, NSArray<NSString *> *defaults) {
+#if TARGET_OS_SIMULATOR
+    LGPresentInfoSheet(controller, title, @"app selection is unavailable in the simulator");
+    return;
+#else
     PSSpecifier *specifier = [PSSpecifier preferenceSpecifierNamed:title
         target:controller
         set:@selector(setAppExclusions:specifier:)
@@ -1569,6 +1575,7 @@ static void LGPresentAppList(UIViewController *controller, NSString *key,
     [list setSpecifier:specifier];
     list.title = title;
     [controller.navigationController pushViewController:list animated:YES];
+#endif
 }
 
 void LGPresentGlobalControlsAppList(UIViewController *controller) {
