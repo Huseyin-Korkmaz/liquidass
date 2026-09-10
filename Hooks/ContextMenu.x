@@ -186,8 +186,13 @@ static void setBackdropHiddenInEffectView(UIView *effectView) {
     }
 }
 
+static BOOL contextMenuNeedsLegacyInsetWorkaround(void) {
+    return NSProcessInfo.processInfo.operatingSystemVersion.majorVersion < 16;
+}
+
 static CGRect contextMenuVisualBounds(UIView *listView) {
     CGRect bounds = listView.bounds;
+    if (!contextMenuNeedsLegacyInsetWorkaround()) return bounds;
     UICollectionView *collection = (UICollectionView *)findDescendantMatching(listView, ^BOOL(UIView *view) {
         return [view isKindOfClass:UICollectionView.class];
     });
@@ -201,9 +206,12 @@ static CGRect contextMenuVisualBounds(UIView *listView) {
 static void injectGlassIntoContextEffectView(UIVisualEffectView *fx, int attempt) {
     if (!lgHostEnabled(@"ContextMenu")) return;
     if (isExactClass(fx.superview, @"_UIContextMenuHeaderView")) return;
-    UIView *container = fx;
-    while (container && !isExactClass(container, @"_UIContextMenuListView")) container = container.superview;
-    if (!container) return;
+    UIView *container = fx.contentView;
+    if (contextMenuNeedsLegacyInsetWorkaround()) {
+        container = fx;
+        while (container && !isExactClass(container, @"_UIContextMenuListView")) container = container.superview;
+        if (!container) return;
+    }
     // springboard sometimes gives us zero-ish bounds for a bit
     if (CGRectGetWidth(container.bounds) < 10.0 || CGRectGetHeight(container.bounds) < 10.0) {
         if (attempt >= 10) return;
@@ -622,9 +630,11 @@ static void ctxScheduleLayoutProbe(UIView *listView) {
             frame.size.width = MAX(0.0, CGRectGetWidth(collection.superview.bounds) -
                                          kCtxContentInset * 2.0);
             collection.frame = frame;
-            for (UIView *view = collection.superview; view && view != (UIView *)self; view = view.superview) {
-                ctxRememberVisualState(view);
-                view.clipsToBounds = NO;
+            if (contextMenuNeedsLegacyInsetWorkaround()) {
+                for (UIView *view = collection.superview; view && view != (UIView *)self; view = view.superview) {
+                    ctxRememberVisualState(view);
+                    view.clipsToBounds = NO;
+                }
             }
         }
         styleContextMenuListSubviews((UIView *)self);

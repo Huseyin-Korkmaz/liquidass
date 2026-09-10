@@ -417,7 +417,7 @@ static CGRect LGTabBarPillFrame(UITabBar *bar) {
     CGFloat originX = (CGRectGetWidth(bar.bounds) - width) * 0.5;
     CGFloat safeBottom = bar.safeAreaInsets.bottom;
     CGFloat bottom = CGRectGetHeight(bar.bounds)
-                   - (safeBottom > 0.0 ? safeBottom : bottomInset);
+                   - (safeBottom > 0.0 ? safeBottom - 2.5 : bottomInset);
     return LGTabBarPixelAlignedRect(
         bar,
         CGRectMake(originX, bottom - height, width, height));

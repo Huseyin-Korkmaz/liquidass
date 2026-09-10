@@ -408,11 +408,7 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
             (hasPredictionStrip ? 0.0 : LGKeyboardTopOverhang()) -
             CGRectGetHeight(primary.bounds);
     }
-    CGRect windowFrame = [stock.window convertRect:stock.window.bounds
-                                            toView:container];
-    CGFloat bottomDistance = fmax(0.0, CGRectGetMaxY(windowFrame) -
-                                       CGRectGetMaxY(mergedFrame));
-    mergedFrame.size.height += bottomDistance + 25.0;
+    mergedFrame.size.height += 75.0;
     if (!hasPredictionStrip) {
         container.clipsToBounds = NO;
         container.layer.masksToBounds = NO;

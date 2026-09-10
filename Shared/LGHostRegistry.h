@@ -39,7 +39,7 @@ typedef struct {
     X(Passcode,       "dylv.liquidglass.passcode",     "Passcode",        0.50f,          28.00f,    96.00f, 2.2f, 1.60f, 1.0f, 1.0f,  1.00f, "#FFFFFF1A", "#0000001F") \
     X(Clock,          "dylv.liquidglass.clock",        "Clock",           0.00f,          12.00f,    120.0f, 1.6f, 1.60f, 2.0f, 1.0f,  0.00f, "#FFFFFF4C", "#FFFFFF4C") \
     X(PrefsSlider,    "dylv.liquidglass.prefsslider",  "PrefsSlider",     0.50f,          10.00f,    108.0f, 2.6f, 1.60f, 0.0f, 1.0f,  1.00f, "#FFFFFF1A", "#00000000") \
-    X(PrefsSwitch,    "dylv.liquidglass.prefsswitch",  "PrefsSwitch",     0.50f,          5.000f,    108.0f, 2.6f, 1.60f, 0.0f, 1.0f,  1.00f, "#FFFFFF1A", "#00000000") \
+    X(PrefsSwitch,    "dylv.liquidglass.prefsswitch",  "PrefsSwitch",     0.50f,          6.500f,    108.0f, 2.6f, 1.60f, 0.0f, 1.0f,  1.00f, "#FFFFFF1A", "#00000000") \
     X(PrefsButton,    "dylv.liquidglass.prefsbutton",  "PrefsButton",     0.50f,          16.00f,    108.0f, 2.0f, 1.60f, 3.0f, 1.0f,  1.00f, "#FFFFFFCC", "#2A2A2D80") \
     X(PrefsSegment,   "dylv.liquidglass.prefssegment", "PrefsSegment",    0.50f,          8.000f,    132.0f, 1.4f, 1.60f, 0.0f, 1.0f,  0.50f, "#FFFFFF1A", "#00000000") \
     X(CoverSheet,     "dylv.liquidglass.coversheet",   "CoverSheet",      0.00f,          64.00f,    192.0f, 1.4f, 1.60f, 0.0f, 0.0f,  2.00f, "#0000002E", "#0000002E") \

@@ -88,6 +88,10 @@ static BOOL LGVolumeHUDEnabled(void) {
     return lgHostEnabled(@"VolumeHUD");
 }
 
+static BOOL LGVolumeHUDNeedsLegacyMaterialWorkaround(void) {
+    return NSProcessInfo.processInfo.operatingSystemVersion.majorVersion < 16;
+}
+
 static UIView *LGVolumeHUDDescendant(UIView *view, Class targetClass) {
     if ([view isKindOfClass:targetClass]) return view;
     for (UIView *subview in view.subviews) {
@@ -234,11 +238,13 @@ static void LGUpdateVolumeHUDGlass(SBElasticSliderMaterialWrapperView *self) {
             sliderView.layer.cornerCurve = kCACornerCurveContinuous;
         }
         sliderView.layer.masksToBounds = YES;
-        for (UIView *subview in sliderView.subviews) {
-            if (![subview isKindOfClass:NSClassFromString(@"MTMaterialView")]) continue;
-            subview.layer.cornerRadius = radius;
-            subview.layer.cornerCurve = kCACornerCurveContinuous;
-            subview.layer.masksToBounds = YES;
+        if (LGVolumeHUDNeedsLegacyMaterialWorkaround()) {
+            for (UIView *subview in sliderView.subviews) {
+                if (![subview isKindOfClass:NSClassFromString(@"MTMaterialView")]) continue;
+                subview.layer.cornerRadius = radius;
+                subview.layer.cornerCurve = kCACornerCurveContinuous;
+                subview.layer.masksToBounds = YES;
+            }
         }
     }
     LGScheduleVolumeHUDProbe(self);
