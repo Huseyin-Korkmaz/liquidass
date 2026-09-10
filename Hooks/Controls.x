@@ -2606,6 +2606,7 @@ static void LGUpdateSettingsSidebar(UIView *container) {
 %end
 
 %ctor {
+    if (LGIsExcludedSystemProcess()) return;
     NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier ?: @"";
 
     if ([bundleIdentifier isEqualToString:@"com.apple.springboard"]) return;

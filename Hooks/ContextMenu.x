@@ -2,6 +2,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
+#import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
 
 static const NSInteger kCtxDividerTag    = 0xD171;
@@ -446,6 +447,8 @@ static void styleContextMenuListSubviews(UIView *listView) {
 
 #pragma mark - hooks
 
+%group LGContextMenuHooks
+
 %hook UIVisualEffectView
 - (void)didMoveToWindow {
     %orig;
@@ -612,6 +615,10 @@ static void styleContextMenuListSubviews(UIView *listView) {
 }
 %end
 
+%end
+
 %ctor {
+    if (LGIsExcludedSystemProcess()) return;
+    %init(LGContextMenuHooks);
     lgObservePreferenceReload(^{ restoreContextMenusForDisable(); });
 }

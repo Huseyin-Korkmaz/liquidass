@@ -54,7 +54,6 @@ static NSHashTable<UIView *> *gLGKeyboardBackdrops;
 static NSHashTable<UIView *> *gLGKeyboardVisualEffects;
 static NSUInteger gLGKeyboardBackdropLogCount;
 static BOOL gLGKeyboardKeyplaneRefreshScheduled;
-static const CGFloat kLGKeyboardBottomGlassExtra = 50.0;
 
 static CGFloat LGKeyboardCornerRadius(void) {
     return fmin(60.0, fmax(0.0,
@@ -409,7 +408,11 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
             (hasPredictionStrip ? 0.0 : LGKeyboardTopOverhang()) -
             CGRectGetHeight(primary.bounds);
     }
-    mergedFrame.size.height += kLGKeyboardBottomGlassExtra;
+    CGRect windowFrame = [stock.window convertRect:stock.window.bounds
+                                            toView:container];
+    CGFloat bottomDistance = fmax(0.0, CGRectGetMaxY(windowFrame) -
+                                       CGRectGetMaxY(mergedFrame));
+    mergedFrame.size.height += bottomDistance + 25.0;
     if (!hasPredictionStrip) {
         container.clipsToBounds = NO;
         container.layer.masksToBounds = NO;
@@ -479,6 +482,8 @@ static void LGUpdateKeyboardVisualEffect(UIView *effectView) {
     LGKeyboardSetVisualEffectHidden(effectView,
                                     lgHostEnabled(@"Keyboard") ? YES : requestedHidden);
 }
+
+%group LGKeyboardHooks
 
 %hook UIKBBackdropView
 
@@ -665,7 +670,11 @@ static void LGUpdateKeyboardVisualEffect(UIView *effectView) {
 
 %end
 
+%end
+
 %ctor {
+    if (LGIsExcludedSystemProcess()) return;
+    %init(LGKeyboardHooks);
     gLGKeyboardBackdrops = [NSHashTable weakObjectsHashTable];
     gLGKeyboardVisualEffects = [NSHashTable weakObjectsHashTable];
     LGLog(@"[keyboard] ctor process=%@ bundle=%@ backdrop=%d visualEffect=%d",

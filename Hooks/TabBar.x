@@ -2109,6 +2109,7 @@ static UITabBar *LGFindTabBarInView(UIView *view) {
 %end
 
 %ctor {
+    if (LGIsExcludedSystemProcess()) return;
     %init(LGTabBarHooks);
     LGHookTabBarHostControllers();
     lgObservePreferenceReload(^{
