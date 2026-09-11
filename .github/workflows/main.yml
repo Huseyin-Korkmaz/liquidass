@@ -82,6 +82,28 @@ jobs:
           brew install ldid make
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
+      - name: install AltList
+        run: |
+          git clone --depth=1 https://github.com/opa334/AltList.git
+          cd AltList
+
+          export THEOS="$GITHUB_WORKSPACE/theos"
+
+          make clean
+          make FINALPACKAGE=1
+
+          mkdir -p "$THEOS/lib"
+          cp -Rv "./.theos/obj/AltList.framework" "$THEOS/lib"
+
+          make clean
+          make FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+
+          mkdir -p "$THEOS/lib/iphone/rootless/lib"
+          cp -Rv "./.theos/obj/AltList.framework" "$THEOS/lib/iphone/rootless"
+
+          cd ..
+          rm -rf AltList
+
       - name: build (${{ matrix.scheme }})
         run: |
           SCHEME_FLAG=""
@@ -90,7 +112,9 @@ jobs:
           elif [ "${{ matrix.scheme }}" = "roothide" ]; then
             SCHEME_FLAG="THEOS_PACKAGE_SCHEME=roothide"
           fi
+
           make clean
+
           make package \
             ARCHS="arm64 arm64e" \
             TARGET="$DEVICE_TARGET" \
@@ -126,10 +150,10 @@ jobs:
           name: "Nightly"
           body: |
             This build was automatically generated from the latest commit on `main`.
-            
+
             **Commit SHA:** ${{ github.sha }}
             **Triggered by:** @${{ github.actor }}
-            
+
             > [!NOTE]
             > A nightly build is basically the next update partially done. Additionally, this build might have the old version number but the code itself should has the latest commit.
           prerelease: true
