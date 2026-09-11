@@ -42,7 +42,6 @@
 "prefs.subtitle.variable_font_height" = "Wartość osi wysokości czcionki zegara iOS 26.";
 "prefs.subtitle.variable_font_softness" = "Wartość osi miękkości czcionki zegara iOS 26.";
 "prefs.subtitle.global_enabled" = "Główny przełącznik dla każdej powierzchni.";
-"prefs.root.runtime_cache_footer" = "%@ zapisano do RAM";
 
 "prefs.section.dock.title" = "Dok";
 "prefs.section.folder_icons.title" = "Ikony folderów";

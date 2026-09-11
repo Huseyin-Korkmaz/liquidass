@@ -46,7 +46,6 @@
 "prefs.subtitle.variable_font_height" = "ערך ציר הגובה עבור גופן שעון iOS 26.";
 "prefs.subtitle.variable_font_softness" = "ערך ציר הרכות עבור גופן שעון iOS 26.";
 "prefs.subtitle.global_enabled" = "מתג ראשי עבור כל המשטחים.";
-"prefs.root.runtime_cache_footer" = "%@ נשמר בזיכרון (RAM)";
 
 "prefs.section.dock.title" = "Dock";
 "prefs.section.folder_icons.title" = "סמלי תיקיות";

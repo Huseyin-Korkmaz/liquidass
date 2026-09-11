@@ -41,7 +41,6 @@
 "prefs.subtitle.variable_font_height" = "Height axis value for the iOS 26 clock font.";
 "prefs.subtitle.variable_font_softness" = "Softness axis value for the iOS 26 clock font.";
 "prefs.subtitle.global_enabled" = "Master switch for every surface.";
-"prefs.root.runtime_cache_footer" = "%@ cached to RAM";
 "prefs.section.dock.title" = "Dock";
 "prefs.section.folder_icons.title" = "Folder Icons";
 "prefs.section.folder_open.title" = "Folder Open";

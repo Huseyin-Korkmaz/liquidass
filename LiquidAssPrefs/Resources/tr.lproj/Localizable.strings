@@ -46,7 +46,6 @@
 "prefs.subtitle.variable_font_height" = "iOS 26 saat yazı tipi için yükseklik ekseni değeri.";
 "prefs.subtitle.variable_font_softness" = "iOS 26 saat yazı tipi için yumuşaklık ekseni değeri.";
 "prefs.subtitle.global_enabled" = "Tüm yüzeyler için ana anahtar.";
-"prefs.root.runtime_cache_footer" = "%@ RAM'e önbelleğe alındı";
 
 "prefs.section.dock.title" = "Dock";
 "prefs.section.folder_icons.title" = "Klasör Simgeleri";

@@ -38,7 +38,6 @@
 "prefs.subtitle.variable_font_height" = "Giá trị trục chiều cao của phông đồng hồ iOS 26.";
 "prefs.subtitle.variable_font_softness" = "Giá trị trục độ mềm của phông đồng hồ iOS 26.";
 "prefs.subtitle.global_enabled" = "Công tắc chính cho mọi bề mặt.";
-"prefs.root.runtime_cache_footer" = "%@ đã lưu vào RAM";
 
 "prefs.section.dock.title" = "Dock";
 "prefs.section.folder_icons.title" = "Biểu tượng thư mục";

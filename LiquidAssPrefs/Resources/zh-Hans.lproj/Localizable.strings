@@ -46,7 +46,6 @@
 "prefs.subtitle.variable_font_height" = "iOS 26 时钟字体的“字高”轴数值。";
 "prefs.subtitle.variable_font_softness" = "iOS 26 时钟字体的“柔和度”轴数值。";
 "prefs.subtitle.global_enabled" = "所有表面的总开关。";
-"prefs.root.runtime_cache_footer" = "%@ 已缓存到 RAM";
 
 "prefs.section.dock.title" = "程序坞";
 "prefs.section.folder_icons.title" = "文件夹图标";
